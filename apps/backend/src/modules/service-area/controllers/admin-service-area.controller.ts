@@ -22,7 +22,7 @@ export class AdminServiceAreaController {
   @Get()
   @ApiOperation({ summary: 'List all service areas for admin' })
   list(@Query() query: ServiceAreaQueryDto) {
-    return this.serviceAreaService.list({ ...query, publicOnly: false } as any);
+    return this.serviceAreaService.list(query, false);
   }
 
   @Post()

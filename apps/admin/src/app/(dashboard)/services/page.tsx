@@ -48,8 +48,8 @@ function ServiceDialog({
   }, [open, editService, reset]);
 
   const onSubmit = (values: ServiceForm) => {
-    if (editService) {
-      updateMutation.mutate({ id: editService.id, ...values }, {
+    if (editServiceId) {
+      updateMutation.mutate({ id: editServiceId, ...values }, {
         onSuccess: () => { toast.success('Service updated'); onClose(); },
       });
     } else {

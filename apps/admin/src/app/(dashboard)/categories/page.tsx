@@ -56,9 +56,9 @@ function CategoryDialog({
   }, [open, editCategory, reset]);
 
   const onSubmit = (values: CategoryForm) => {
-    if (editCategory) {
+    if (editCategoryId) {
       updateMutation.mutate(
-        { id: editCategory.id, ...values, iconUrl: values.iconUrl || undefined },
+        { id: editCategoryId, ...values, iconUrl: values.iconUrl || undefined },
         {
           onSuccess: () => { toast.success('Category updated'); onClose(); },
           onError: () => toast.error('Failed to update category'),

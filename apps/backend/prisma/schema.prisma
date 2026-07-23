@@ -293,6 +293,7 @@ model Technician {
   profilePictureUrl  String?            @map("profile_picture_url")
   isAvailable        Boolean            @default(false) @map("is_available")
   verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
+  rejectionNote      String?            @map("rejection_note")
   rating             Decimal            @default(0) @db.Decimal(3, 2) // 0.00 – 5.00
   totalJobs          Int                @default(0) @map("total_jobs")
   // Live location — updated by mobile GPS

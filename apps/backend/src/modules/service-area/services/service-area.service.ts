@@ -17,15 +17,15 @@ export class ServiceAreaService {
     private readonly cacheService: ServiceAreaCacheService,
   ) {}
 
-  async list(query: ServiceAreaQueryDto) {
-    const cacheKey = this.cacheKey('list', query);
+  async list(query: ServiceAreaQueryDto, publicOnly = true) {
+    const cacheKey = this.cacheKey(`list:${publicOnly}`, query);
     const cached = await this.cacheService.get(cacheKey);
 
     if (cached) {
       return cached;
     }
 
-    const result = await this.serviceAreaRepository.list(query, true);
+    const result = await this.serviceAreaRepository.list(query, publicOnly);
     await this.cacheService.set(cacheKey, result);
     return result;
   }

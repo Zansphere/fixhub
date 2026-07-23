@@ -5,7 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useRouter } from 'next/navigation';
 import { Shield, ShieldCheck, ShieldX } from 'lucide-react';
 
-import { useTechnicians, useUpdateTechnicianStatus, useVerifyTechnician } from '@/lib/api/queries/use-technicians';
+import { useTechnicians, useUpdateTechnicianStatus } from '@/lib/api/queries/use-technicians';
 import type { Technician, VerificationStatus } from '@/lib/types';
 import { formatDate, verificationStatusVariant } from '@/lib/utils';
 import { Avatar, Badge, Button, Select } from '@/components/ui';
@@ -23,7 +23,7 @@ const VERIFICATION_OPTIONS = [
 const AVAILABILITY_OPTIONS = [
   { label: 'All Availability', value: '' },
   { label: 'Available', value: 'true' },
-  { label: 'Unavailable', value: 'false' },
+  { label: 'Offline', value: 'false' },
 ];
 
 function VerificationBadge({ status }: { status: VerificationStatus }) {
@@ -73,7 +73,6 @@ export default function TechniciansPage() {
   });
 
   const updateStatus = useUpdateTechnicianStatus();
-  const verifyTech = useVerifyTechnician();
 
   const columns: ColumnDef<Technician, unknown>[] = [
     {
@@ -173,20 +172,6 @@ export default function TechniciansPage() {
         const t = row.original;
         return (
           <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-            {t.verificationStatus === 'PENDING' || t.verificationStatus === 'UNDER_REVIEW' ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() =>
-                  verifyTech.mutate({ id: t.id, status: 'VERIFIED' }, {
-                    onSuccess: () => toast.success(`${t.user?.name} verified`),
-                  })
-                }
-                loading={verifyTech.isPending}
-              >
-                Verify
-              </Button>
-            ) : null}
             <Button
               size="sm"
               variant={t.user?.isActive ? 'ghost' : 'secondary'}

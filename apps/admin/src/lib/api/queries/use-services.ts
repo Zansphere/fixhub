@@ -7,7 +7,7 @@ import { endpoints } from '../endpoints';
 
 export function useServices(categoryId?: string) {
   return useQuery({
-    queryKey: ['services', categoryId],
+    queryKey: ['services', 'list', categoryId],
     queryFn: async () => {
       const { data } = await apiClient.get<{ data: { items: SubService[] } }>(endpoints.catalog.services, {
         params: categoryId ? { categoryId } : undefined,
@@ -19,7 +19,7 @@ export function useServices(categoryId?: string) {
 
 export function useService(id?: string) {
   return useQuery({
-    queryKey: ['services', id],
+    queryKey: ['services', 'detail', id],
     queryFn: async () => {
       const { data } = await apiClient.get<{ data: SubService }>(endpoints.catalog.service(id!));
       return data.data;
