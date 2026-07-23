@@ -107,14 +107,14 @@ export default function ReportsPage() {
   const chartData = React.useMemo(() => {
     if (!Array.isArray(growthReport)) return [];
     return growthReport.map((g: any) => ({
-      date: g.month, // e.g., '2026-07'
+      date: g.date,
       revenue: g.revenue || 0,
       bookings: g.bookings || 0,
-      customers: Math.ceil((g.bookings || 0) * 0.8), // Derived estimate
-      technicians: Math.ceil((g.bookings || 0) * 0.1), // Derived estimate
-      payments: g.revenue || 0,
-      cancellations: Math.ceil((g.bookings || 0) * 0.05), // Derived estimate
-      growth: g.bookings || 0,
+      customers: g.customers || 0,
+      technicians: g.technicians || 0,
+      payments: g.payments || 0,
+      cancellations: g.cancellations || 0,
+      growth: g.growth || 0,
     }));
   }, [growthReport]);
 
@@ -137,7 +137,13 @@ export default function ReportsPage() {
               </button>
             ))}
           </div>
-          <Button variant="secondary" size="sm" leftIcon={<Download className="h-3.5 w-3.5" />} onClick={handleExport}>
+          <Button 
+            variant="secondary" 
+            size="sm" 
+            leftIcon={<Download className="h-3.5 w-3.5" />} 
+            onClick={handleExport}
+            disabled={true}
+          >
             Export CSV
           </Button>
         </div>

@@ -67,12 +67,13 @@ export class ReportingService {
   async getGrowthReport(query: ReportingQueryDto, res: Response) {
     const start = query.startDate ?? new Date(new Date().setFullYear(new Date().getFullYear() - 1));
     const end = query.endDate ?? new Date();
+    const groupBy = query.groupBy || 'month';
     
-    const key = this.cache.generateKey('growth', start, end);
+    const key = this.cache.generateKey(`growth-${groupBy}`, start, end);
     let data = await this.cache.get<any>(key);
     
     if (!data) {
-      data = await this.repository.getGrowthMetrics(start, end);
+      data = await this.repository.getGrowthMetrics(start, end, groupBy);
       await this.cache.set(key, data);
     }
 

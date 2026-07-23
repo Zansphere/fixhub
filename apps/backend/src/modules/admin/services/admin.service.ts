@@ -2,7 +2,7 @@ import { ErrorCodes } from '@fixhub/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { VerificationStatus } from '@prisma/client';
 
-import { CustomerQueryDto, TechnicianQueryDto } from '../dto/admin.dto';
+import { CustomerQueryDto, PaymentQueryDto, TechnicianQueryDto } from '../dto/admin.dto';
 import { AdminRepository } from '../repositories/admin.repository';
 
 @Injectable()
@@ -15,6 +15,10 @@ export class AdminService {
 
   async listCustomers(query: CustomerQueryDto) {
     return this.adminRepository.listCustomers(query);
+  }
+
+  async listPayments(query: PaymentQueryDto) {
+    return this.adminRepository.listPayments(query);
   }
 
   async getCustomerDetails(id: string) {

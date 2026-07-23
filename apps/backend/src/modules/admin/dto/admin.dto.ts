@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { VerificationStatus } from '@prisma/client';
+import { VerificationStatus, PaymentStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
@@ -49,3 +49,11 @@ export class VerifyTechnicianDto {
   @MaxLength(500)
   rejectionNote?: string;
 }
+
+export class PaymentQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ enum: PaymentStatus })
+  @IsOptional()
+  @IsEnum(PaymentStatus)
+  status?: PaymentStatus;
+}
+

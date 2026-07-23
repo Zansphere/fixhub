@@ -235,7 +235,14 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           <Card>
             <CardHeader>
               <CardTitle>Technician</CardTitle>
-              <Button variant="secondary" size="sm" onClick={() => setAssignDialogOpen(true)}>Reassign</Button>
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={() => setAssignDialogOpen(true)}
+                disabled={status !== 'CONFIRMED' && status !== 'PENDING_PAYMENT'}
+              >
+                Reassign
+              </Button>
             </CardHeader>
             <CardContent>
               {booking.technician ? (
@@ -257,7 +264,13 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
               ) : (
                 <div className="flex items-center justify-between rounded-lg bg-[#FFFBEB] px-4 py-3">
                   <span className="text-sm text-[#92400E]">No technician assigned</span>
-                  <Button size="sm" onClick={() => setAssignDialogOpen(true)}>Assign Technician</Button>
+                  <Button 
+                    size="sm" 
+                    onClick={() => setAssignDialogOpen(true)}
+                    disabled={status !== 'CONFIRMED' && status !== 'PENDING_PAYMENT'}
+                  >
+                    Assign Technician
+                  </Button>
                 </div>
               )}
             </CardContent>

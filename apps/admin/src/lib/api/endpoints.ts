@@ -63,7 +63,7 @@ export const endpoints = {
 
   // Payments
   payments: {
-    list: '/admin/bookings', // payments are fetched via bookings
+    list: '/admin/payments',
     refund: (id: string) => `/admin/payments/${id}/refund`,
   },
 

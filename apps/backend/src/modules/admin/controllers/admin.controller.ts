@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 import { Role } from '@prisma/client';
 
 import { Roles } from '../../../common/decorators/roles.decorator';
-import { CustomerQueryDto, TechnicianQueryDto, UpdateUserStatusDto, VerifyTechnicianDto } from '../dto/admin.dto';
+import { CustomerQueryDto, PaymentQueryDto, TechnicianQueryDto, UpdateUserStatusDto, VerifyTechnicianDto } from '../dto/admin.dto';
 import { AdminService } from '../services/admin.service';
 
 @ApiTags('Admin')
@@ -17,6 +17,14 @@ export class AdminController {
   @ApiOperation({ summary: 'Get dashboard statistics' })
   async getDashboard() {
     return this.adminService.getDashboardStats();
+  }
+
+  // ── Payments Management ──────────────────────────────────
+
+  @Get('payments')
+  @ApiOperation({ summary: 'List all payments (paginated)' })
+  async listPayments(@Query() query: PaymentQueryDto) {
+    return this.adminService.listPayments(query);
   }
 
   // ── Customer Management ──────────────────────────────────

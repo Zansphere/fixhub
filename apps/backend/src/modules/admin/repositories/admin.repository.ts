@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, VerificationStatus } from '@prisma/client';
 
 import { PrismaService } from '../../../common/database/prisma.service';
-import { CustomerQueryDto, TechnicianQueryDto } from '../dto/admin.dto';
+import { CustomerQueryDto, PaymentQueryDto, TechnicianQueryDto } from '../dto/admin.dto';
 
 @Injectable()
 export class AdminRepository {
@@ -31,7 +31,7 @@ export class AdminRepository {
       this.prisma.customer.count(),
       this.prisma.technician.count(),
       this.prisma.booking.count({
-        where: { status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'ASSIGNED', 'IN_PROGRESS'] } },
+        where: { status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'ASSIGNED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'PRICE_REVISION_PENDING'] } },
       }),
       this.prisma.booking.findMany({
         take: 5,
@@ -250,6 +250,40 @@ export class AdminRepository {
       },
       include: { user: { select: { id: true, name: true, phone: true, isActive: true } } },
     });
+  }
+
+  async listPayments(query: PaymentQueryDto) {
+    const where: Prisma.PaymentWhereInput = {
+      ...(query.status && { status: query.status }),
+    };
+
+    const sortBy = query.sortBy === 'amount' ? 'amount' : 'createdAt';
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.payment.findMany({
+        where,
+        skip: query.skip,
+        take: query.limit,
+        orderBy: { [sortBy]: query.sortOrder ?? 'desc' },
+        include: {
+          booking: {
+            select: {
+              bookingNumber: true,
+              customer: {
+                select: {
+                  user: {
+                    select: { name: true, phone: true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }),
+      this.prisma.payment.count({ where }),
+    ]);
+
+    return this.paginate(items, total, query);
   }
 
   private customerSortField(sortBy?: string) {

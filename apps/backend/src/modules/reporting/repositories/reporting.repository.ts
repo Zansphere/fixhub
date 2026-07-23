@@ -8,11 +8,14 @@ export class ReportingRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async getRevenueMetrics(where: Prisma.BookingWhereInput) {
-    const revenue = await this.prisma.booking.aggregate({
-      where: { ...where, status: BookingStatus.COMPLETED },
-      _sum: { totalAmount: true },
+    const revenue = await this.prisma.payment.aggregate({
+      where: {
+        createdAt: where.createdAt as Prisma.DateTimeFilter<'Payment'> | undefined,
+        status: 'CAPTURED' 
+      },
+      _sum: { amount: true },
     });
-    return revenue._sum.totalAmount ?? 0;
+    return revenue._sum.amount ?? 0;
   }
 
   async getBookingMetrics(where: Prisma.BookingWhereInput) {
@@ -131,27 +134,79 @@ export class ReportingRepository {
     };
   }
 
-  async getGrowthMetrics(startDate: Date, endDate: Date) {
-    // We'll approximate monthly growth by fetching bookings and grouping them by month
-    // Prisma doesn't natively group by date parts easily across all databases, so we fetch and group in memory
-    const bookings = await this.prisma.booking.findMany({
-      where: { createdAt: { gte: startDate, lte: endDate } },
-      select: { createdAt: true, totalAmount: true },
-    });
+  async getGrowthMetrics(startDate: Date, endDate: Date, groupBy: string = 'month') {
+    const whereDate = { gte: startDate, lte: endDate };
 
-    const monthlyGrowth: Record<string, { bookings: number; revenue: number }> = {};
-    
-    for (const b of bookings) {
-      const month = `${b.createdAt.getFullYear()}-${String(b.createdAt.getMonth() + 1).padStart(2, '0')}`;
-      if (!monthlyGrowth[month]) {
-        monthlyGrowth[month] = { bookings: 0, revenue: 0 };
+    const [bookings, customers, technicians, payments] = await Promise.all([
+      this.prisma.booking.findMany({
+        where: { createdAt: whereDate },
+        select: { createdAt: true, totalAmount: true, status: true },
+      }),
+      this.prisma.customer.findMany({
+        where: { createdAt: whereDate },
+        select: { createdAt: true },
+      }),
+      this.prisma.technician.findMany({
+        where: { createdAt: whereDate },
+        select: { createdAt: true },
+      }),
+      this.prisma.payment.findMany({
+        where: { createdAt: whereDate, status: 'CAPTURED' },
+        select: { createdAt: true, amount: true },
+      }),
+    ]);
+
+    const groupedData: Record<string, any> = {};
+
+    const getGroupKey = (date: Date) => {
+      if (groupBy === 'day') return date.toISOString().split('T')[0];
+      if (groupBy === 'week') {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        const dayNum = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+        return `${d.getUTCFullYear()}-W${weekNo.toString().padStart(2, '0')}`;
       }
-      monthlyGrowth[month].bookings++;
-      monthlyGrowth[month].revenue += Number(b.totalAmount);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    };
+
+    const initGroup = (key: string) => {
+      if (!groupedData[key]) {
+        groupedData[key] = { date: key, bookings: 0, revenue: 0, customers: 0, technicians: 0, payments: 0, cancellations: 0, growth: 0 };
+      }
+    };
+
+    for (const b of bookings) {
+      const key = getGroupKey(b.createdAt);
+      initGroup(key);
+      groupedData[key].bookings++;
+      groupedData[key].growth++;
+      if (b.status === BookingStatus.CANCELLED) {
+        groupedData[key].cancellations++;
+      }
     }
 
-    return Object.entries(monthlyGrowth)
-      .map(([month, stats]) => ({ month, ...stats }))
-      .sort((a, b) => a.month.localeCompare(b.month));
+    for (const c of customers) {
+      const key = getGroupKey(c.createdAt);
+      initGroup(key);
+      groupedData[key].customers++;
+    }
+
+    for (const t of technicians) {
+      const key = getGroupKey(t.createdAt);
+      initGroup(key);
+      groupedData[key].technicians++;
+    }
+
+    for (const p of payments) {
+      const key = getGroupKey(p.createdAt);
+      initGroup(key);
+      const amount = Number(p.amount);
+      groupedData[key].payments += amount;
+      groupedData[key].revenue += amount;
+    }
+
+    return Object.values(groupedData).sort((a, b) => a.date.localeCompare(b.date));
   }
 }
