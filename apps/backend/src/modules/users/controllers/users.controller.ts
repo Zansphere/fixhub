@@ -73,6 +73,16 @@ export class UsersController {
     );
   }
 
+  @Get('presigned-get-url')
+  @ApiOperation({ summary: 'Get a short-lived presigned URL for downloading/viewing S3 media' })
+  @ApiResponse({ status: 200, description: 'Presigned URL returned' })
+  getPresignedGetUrl(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('url') url: string,
+  ) {
+    return this.usersService.getPresignedGetUrl(url);
+  }
+
   @Get('addresses')
   @ApiOperation({ summary: 'List customer addresses' })
   @ApiResponse({ status: 200, description: 'Customer addresses returned' })

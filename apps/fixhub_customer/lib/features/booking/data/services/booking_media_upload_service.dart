@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/dio_client.dart';
@@ -9,28 +10,45 @@ final bookingMediaUploadServiceProvider =
   return BookingMediaUploadService(ref.read(dioProvider));
 });
 
-/// Handles the two-step media upload flow:
-/// 1. Ask backend for a presigned S3 PUT URL
-/// 2. PUT the file bytes directly to S3
-/// 3. Register the final public URL with the backend
+/// Handles the two-step presigned S3 media upload flow for booking issue photos/videos.
+///
+/// Flow per file:
+///   1. POST /bookings/{id}/media { fileName, contentType, sizeBytes, type, uploadPhase }
+///      → backend returns { uploadUrl, key }
+///   2. PUT <uploadUrl> with raw bytes via a fresh Dio (no JWT — S3 must not see it)
+///   3. POST /bookings/{id}/media with same params + `url: publicUrl`
+///      → backend creates the BookingMedia DB record
+///
+/// The S3 PUT uses readAsBytes() (not openRead()) to provide an accurate Content-Length,
+/// which is mandatory for pre-signed PutObject URLs.
 class BookingMediaUploadService {
-  final Dio _dio;
-
   BookingMediaUploadService(this._dio);
 
-  /// Upload [file] to the booking with [bookingId].
-  /// Returns the public URL stored in the BookingMedia record.
+  final Dio _dio;
+
+  // S3 bucket public base URL (matches backend StorageService config)
+  static const _s3Base =
+      'https://fixhub-uploads.s3.ap-south-1.amazonaws.com';
+
+  /// Upload [file] for booking [bookingId].
+  ///
+  /// [contentType] e.g. 'image/jpeg', 'video/mp4'
+  /// [phase] one of 'BEFORE_SERVICE' | 'DURING_SERVICE' | 'AFTER_SERVICE'
+  ///
+  /// Returns the persisted public URL of the newly created [BookingMedia] record.
   Future<String> uploadFile({
     required String bookingId,
     required File file,
     required String contentType,
-    required String phase, // 'BEFORE_SERVICE' | 'DURING_SERVICE' | 'AFTER_SERVICE'
+    required String phase,
+    void Function(int sent, int total)? onProgress,
   }) async {
     final fileName = file.path.split(Platform.pathSeparator).last;
-    final sizeBytes = await file.length();
-    final isVideo = contentType.startsWith('video/');
+    final Uint8List bytes = await file.readAsBytes(); // load once
+    final int sizeBytes = bytes.length;
+    final bool isVideo = contentType.startsWith('video/');
 
-    // Step 1: get presigned upload URL
+    // ── Step 1: Request presigned PUT URL ──────────────────────────────
     final prepResp = await _dio.post(
       ApiEndpoints.bookingMedia(bookingId),
       data: {
@@ -42,30 +60,29 @@ class BookingMediaUploadService {
       },
     );
 
-    final data = _unwrap(prepResp.data);
-    final uploadUrl = data['uploadUrl'] as String;
-    final s3Key = data['key'] as String;
+    final prepData = _unwrap(prepResp.data);
+    final String uploadUrl = prepData['uploadUrl'] as String;
+    final String s3Key = prepData['key'] as String;
 
-    // Step 2: PUT file bytes directly to S3 (no auth headers)
-    final rawDio = Dio(); // fresh Dio — no JWT interceptor
-    await rawDio.put(
+    // ── Step 2: PUT raw bytes to S3 (no JWT, fresh Dio) ───────────────
+    final rawDio = Dio();
+    await rawDio.put<dynamic>(
       uploadUrl,
-      data: file.openRead(),
+      data: bytes, // Uint8List — Dio sends as binary body with known length
       options: Options(
         headers: {
           'Content-Type': contentType,
           'Content-Length': sizeBytes,
         },
-        // follow redirects, ignore non-2xx for now (S3 returns 200)
+        // S3 returns 200; treat non-2xx as an error
+        validateStatus: (status) => status != null && status < 300,
       ),
+      onSendProgress: onProgress,
     );
 
-    // Step 3: register the public URL
-    // Derive the CDN/public URL from the S3 key. The backend's StorageService
-    // follows the pattern: baseUrl + '/' + key.
-    // We re-call POST /media with the same params + url to create the record.
-    const cdnBase = 'https://cdn.fixhub.in'; // matches StorageService config
-    final publicUrl = '$cdnBase/$s3Key';
+    // ── Step 3: Persist the public URL via the backend ─────────────────
+    // Derive the public S3 URL from the generated key.
+    final String publicUrl = '$_s3Base/$s3Key';
 
     final attachResp = await _dio.post(
       ApiEndpoints.bookingMedia(bookingId),
@@ -75,7 +92,7 @@ class BookingMediaUploadService {
         'sizeBytes': sizeBytes,
         'type': isVideo ? 'VIDEO' : 'IMAGE',
         'uploadPhase': phase,
-        'url': publicUrl,
+        'url': publicUrl, // presence of url triggers DB record creation
       },
     );
 

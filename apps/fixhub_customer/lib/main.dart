@@ -26,10 +26,12 @@ Future<void> main() async {
 
   final container = ProviderContainer();
 
-  // FCM — fire-and-forget; never block the UI from rendering
-  container.read(fcmServiceProvider).initialize().catchError((e) {
-    debugPrint('FCM init failed (non-blocking): $e');
-  });
+  // Initialize local notifications (no network)
+  try {
+    await FCMService.initLocalNotifications();
+  } catch (e) {
+    debugPrint('Local notifications init failed: $e');
+  }
 
   runApp(
     UncontrolledProviderScope(

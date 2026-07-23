@@ -26,6 +26,8 @@ class NotificationRemoteDataSource {
       final innerData = data['data'];
       if (innerData is Map && innerData.containsKey('items')) {
         return innerData['items'] as List<dynamic>;
+      } else if (innerData is Map && innerData.containsKey('data')) {
+        return innerData['data'] as List<dynamic>;
       } else if (innerData is List) {
         return innerData;
       }

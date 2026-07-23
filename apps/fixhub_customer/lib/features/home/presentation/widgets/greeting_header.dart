@@ -6,6 +6,7 @@ import '../../../../core/config/theme/app_spacing.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../location/presentation/providers/location_provider.dart';
+import '../../../notifications/presentation/providers/notification_provider.dart';
 
 /// Greeting header showing "Hello, {name}" with location indicator,
 /// gradient avatar, and notification bell.
@@ -93,6 +94,55 @@ class GreetingHeader extends ConsumerWidget {
             ],
           ),
         ),
+
+        // Notification Bell
+        GestureDetector(
+          onTap: () => context.push(RouteNames.notifications),
+          child: Stack(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.border, width: 0.5),
+                ),
+                child: const Icon(
+                  Icons.notifications_outlined,
+                  color: AppColors.textPrimary,
+                  size: 24,
+                ),
+              ),
+              // Unread badge logic
+              Consumer(
+                builder: (context, ref, _) {
+                  final notificationsAsync = ref.watch(notificationsProvider);
+                  final hasUnread = notificationsAsync.maybeWhen(
+                    data: (notifications) => notifications.any((n) => !n.isRead),
+                    orElse: () => false,
+                  );
+
+                  if (!hasUnread) return const SizedBox.shrink();
+
+                  return Positioned(
+                    right: 10,
+                    top: 10,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: AppColors.error,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
 
         // Gradient avatar
         GestureDetector(

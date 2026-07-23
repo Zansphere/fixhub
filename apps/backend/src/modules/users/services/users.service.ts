@@ -396,6 +396,25 @@ export class UsersService {
     };
   }
 
+  async getPresignedGetUrl(urlOrKey: string): Promise<{ downloadUrl: string }> {
+    if (!urlOrKey) {
+      return { downloadUrl: '' };
+    }
+    
+    // Extract key if it's a full URL
+    let key = urlOrKey;
+    try {
+      const urlObj = new URL(urlOrKey);
+      // S3 keys are the path without the leading slash
+      key = urlObj.pathname.replace(/^\/+/, '');
+    } catch {
+      // If URL parsing fails, assume it's already a raw key
+    }
+
+    const downloadUrl = await this.storageService.getDownloadUrl(key);
+    return { downloadUrl };
+  }
+
   private toJson(value: unknown): Prisma.InputJsonValue {
     return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
   }

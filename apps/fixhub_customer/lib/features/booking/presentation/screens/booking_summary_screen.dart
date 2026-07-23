@@ -35,6 +35,12 @@ class _BookingSummaryScreenState extends ConsumerState<BookingSummaryScreen> {
   /// Locally-selected files before upload
   final List<XFile> _selectedFiles = [];
 
+  /// Index of file currently being uploaded (-1 = none)
+  int _uploadingIndex = -1;
+
+  /// 0.0 → 1.0 progress for the file at [_uploadingIndex]
+  double _fileProgress = 0;
+
   // ── Media picking ─────────────────────────────────────────────────
 
   Future<void> _pickImage() async {
@@ -106,14 +112,23 @@ class _BookingSummaryScreenState extends ConsumerState<BookingSummaryScreen> {
   Future<void> _uploadMedia(String draftId) async {
     if (_selectedFiles.isEmpty) return;
     final uploadService = ref.read(bookingMediaUploadServiceProvider);
-    for (final xfile in _selectedFiles) {
+    for (int i = 0; i < _selectedFiles.length; i++) {
+      final xfile = _selectedFiles[i];
+      if (mounted) setState(() { _uploadingIndex = i; _fileProgress = 0; });
       await uploadService.uploadFile(
         bookingId: draftId,
         file: File(xfile.path),
         contentType: _contentType(xfile),
         phase: 'BEFORE_SERVICE',
+        onProgress: (sent, total) {
+          if (mounted && total > 0) {
+            setState(() => _fileProgress = sent / total);
+          }
+        },
       );
+      if (mounted) setState(() { _fileProgress = 1.0; });
     }
+    if (mounted) setState(() => _uploadingIndex = -1);
   }
 
   // ── Main action ───────────────────────────────────────────────────
@@ -358,6 +373,8 @@ class _BookingSummaryScreenState extends ConsumerState<BookingSummaryScreen> {
                 _IssueMediaPicker(
                   files: _selectedFiles,
                   isVideo: _isVideo,
+                  uploadingIndex: _uploadingIndex,
+                  fileProgress: _fileProgress,
                   onPickGallery: _pickImage,
                   onPickVideo: _pickVideo,
                   onPickCamera: _pickFromCamera,
@@ -419,6 +436,8 @@ class _IssueMediaPicker extends StatelessWidget {
   const _IssueMediaPicker({
     required this.files,
     required this.isVideo,
+    required this.uploadingIndex,
+    required this.fileProgress,
     required this.onPickGallery,
     required this.onPickVideo,
     required this.onPickCamera,
@@ -427,6 +446,8 @@ class _IssueMediaPicker extends StatelessWidget {
 
   final List<XFile> files;
   final bool Function(XFile) isVideo;
+  final int uploadingIndex;
+  final double fileProgress;
   final VoidCallback onPickGallery;
   final VoidCallback onPickVideo;
   final VoidCallback onPickCamera;
@@ -475,6 +496,8 @@ class _IssueMediaPicker extends StatelessWidget {
                   _MediaThumb(
                     file: files[i],
                     isVideoFile: isVideo(files[i]),
+                    isUploading: i == uploadingIndex,
+                    progress: i == uploadingIndex ? fileProgress : 0.0,
                     onRemove: () => onRemove(i),
                   ),
               ],
@@ -523,11 +546,15 @@ class _MediaThumb extends StatelessWidget {
   const _MediaThumb({
     required this.file,
     required this.isVideoFile,
+    required this.isUploading,
+    required this.progress,
     required this.onRemove,
   });
 
   final XFile file;
   final bool isVideoFile;
+  final bool isUploading;
+  final double progress;
   final VoidCallback onRemove;
 
   @override
@@ -582,22 +609,42 @@ class _MediaThumb extends StatelessWidget {
                 ),
               ),
             ),
-          // Remove button
-          Positioned(
-            top: 4,
-            right: 4,
-            child: GestureDetector(
-              onTap: onRemove,
-              child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
+          // Upload progress overlay
+          if (isUploading)
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    value: progress > 0 ? progress : null,
+                    strokeWidth: 2.5,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
                 ),
-                child: const Icon(Icons.close, size: 14, color: Colors.white),
               ),
             ),
-          ),
+          // Remove button (hide during upload)
+          if (!isUploading)
+            Positioned(
+              top: 4,
+              right: 4,
+              child: GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close, size: 14, color: Colors.white),
+                ),
+              ),
+            ),
         ],
       ),
     );

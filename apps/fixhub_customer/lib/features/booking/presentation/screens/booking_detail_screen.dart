@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/config/theme/app_colors.dart';
 import '../../../../core/config/theme/app_spacing.dart';
 import '../../../../core/widgets/fixhub_app_bar.dart';
@@ -186,10 +187,23 @@ class BookingDetailScreen extends ConsumerWidget {
                               ],
                             ),
                           ),
-                          // TODO: implement actual call action
                           IconButton(
                             icon: const Icon(Icons.phone, color: AppColors.buttonPrimary),
-                            onPressed: () {},
+                            onPressed: () async {
+                              final phone = booking.technician!['user']?['phone'];
+                              if (phone != null && phone.isNotEmpty) {
+                                final uri = Uri.parse('tel:$phone');
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(uri);
+                                } else {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Could not launch dialer')),
+                                    );
+                                  }
+                                }
+                              }
+                            },
                           ),
                         ],
                       ),
@@ -250,10 +264,31 @@ class BookingDetailScreen extends ConsumerWidget {
                   ),
                 ),
               ],
+
+              // ── "Searching for technician" banner (CONFIRMED, no technician yet) ──
+              if (booking.statusType == BookingStatusType.confirmed &&
+                  booking.technician == null) ...[
+                const SizedBox(height: AppSpacing.md),
+                _SearchingTechnicianBanner(bookingNumber: booking.bookingNumber),
+              ],
+
+              // ── "No technician found / auto-cancelled" banner (FAILED) ──
+              if (booking.statusType == BookingStatusType.failed) ...[
+                const SizedBox(height: AppSpacing.md),
+                _NoTechnicianFoundBanner(
+                  failureReason: booking.failureReason,
+                  onContactSupport: () {
+                    context.push('/support');
+                  },
+                ),
+              ],
+
               
               // Action Buttons
-              if (booking.statusType == BookingStatusType.pending || 
-                  booking.statusType == BookingStatusType.confirmed) ...[
+              // Action Buttons
+              if (booking.statusType != BookingStatusType.completed &&
+                  booking.statusType != BookingStatusType.cancelled &&
+                  booking.statusType != BookingStatusType.failed) ...[
                 const SizedBox(height: AppSpacing.lg),
                 SizedBox(
                   width: double.infinity,
@@ -515,6 +550,200 @@ class BookingDetailScreen extends ConsumerWidget {
         error: (error, _) => FixHubErrorState(
           onRetry: () => ref.invalidate(bookingDetailProvider(bookingId)),
         ),
+      ),
+    );
+  }
+}
+
+// ── Searching for Technician Banner ──────────────────────────────────────────
+
+class _SearchingTechnicianBanner extends StatefulWidget {
+  const _SearchingTechnicianBanner({required this.bookingNumber});
+
+  final String bookingNumber;
+
+  @override
+  State<_SearchingTechnicianBanner> createState() =>
+      _SearchingTechnicianBannerState();
+}
+
+class _SearchingTechnicianBannerState extends State<_SearchingTechnicianBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              FadeTransition(
+                opacity: _pulseAnimation,
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF3B82F6),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'Finding Your Technician',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF1D4ED8),
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Your booking is confirmed and payment received. We\'re matching you with the best available technician in your area. You\'ll receive a notification as soon as one is assigned.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFF1E40AF),
+                  height: 1.5,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              const Icon(Icons.access_time_rounded, size: 14, color: Color(0xFF3B82F6)),
+              const SizedBox(width: 4),
+              Text(
+                'Usually takes 10–30 minutes',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: const Color(0xFF3B82F6),
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── No Technician Found Banner ────────────────────────────────────────────────
+
+class _NoTechnicianFoundBanner extends StatelessWidget {
+  const _NoTechnicianFoundBanner({
+    this.failureReason,
+    required this.onContactSupport,
+  });
+
+  final String? failureReason;
+  final VoidCallback onContactSupport;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1F2),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.cancel_rounded, color: AppColors.error, size: 22),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'We Couldn\'t Find a Technician',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.error,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'We\'re sincerely sorry for the inconvenience. Despite our best efforts, no technicians were available in your area for this booking.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.5,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.verified_rounded, color: AppColors.success, size: 18),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'A full refund has been initiated and will reflect in 3–5 business days.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onContactSupport,
+              icon: const Icon(Icons.headset_mic_rounded, size: 18),
+              label: const Text('Contact Support'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

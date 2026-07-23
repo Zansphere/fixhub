@@ -13,6 +13,7 @@ import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/saved_addresses_screen.dart';
 import '../../features/profile/presentation/screens/add_address_screen.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
+import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/services/presentation/screens/category_services_screen.dart';
 import '../../features/services/presentation/screens/service_detail_screen.dart';
 import '../../features/support/presentation/screens/support_screen.dart';
@@ -160,6 +161,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
 
       // ── Feature Routes ──────────────────────────────────────────
+      GoRoute(
+        path: RouteNames.notifications,
+        name: 'notifications',
+        builder: (context, state) => const NotificationsScreen(),
+      ),
       GoRoute(
         path: RouteNames.categoryServices,
         name: 'categoryServices',

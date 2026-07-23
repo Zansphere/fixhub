@@ -14,6 +14,7 @@ class RouteNames {
   static const profile = '/profile';
 
   // Feature Routes
+  static const notifications = '/notifications';
   static const categoryServices = '/services/:id';
   static const serviceDetail = '/service-detail/:id';
 

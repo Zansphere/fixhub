@@ -16,24 +16,39 @@ class JobProgressTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determine which steps are completed based on status
     final currentStatus = booking.statusType;
+
+    // Ordered list of states representing the full lifecycle
+    final states = [
+      _TimelineState('Pending', BookingStatusType.pending, ['PENDING_PAYMENT', 'PENDING']),
+      _TimelineState('Confirmed', BookingStatusType.confirmed, ['CONFIRMED']),
+      _TimelineState('Assigned', BookingStatusType.assigned, ['ASSIGNED', 'ACCEPTED']),
+      _TimelineState('En Route', BookingStatusType.enRoute, ['EN_ROUTE']),
+      _TimelineState('Arrived', BookingStatusType.arrived, ['ARRIVED']),
+      _TimelineState('In Progress', BookingStatusType.inProgress, ['IN_PROGRESS', 'PRICE_REVISION_PENDING']),
+      _TimelineState('Completed', BookingStatusType.completed, ['COMPLETED']),
+    ];
+
+    // Find the highest reached state index based on the timeline records
+    int highestReachedIdx = -1;
+    for (int i = 0; i < states.length; i++) {
+      if (_hasEvent(states[i].rawStatuses)) {
+        highestReachedIdx = i;
+      }
+    }
     
-    // Status hierarchy logic
-    final isArrived = [
-      BookingStatusType.arrived,
-      BookingStatusType.inProgress,
-      BookingStatusType.completed
-    ].contains(currentStatus);
+    // Fallback if timeline array is somehow empty: use current statusType
+    if (highestReachedIdx == -1) {
+      for (int i = 0; i < states.length; i++) {
+        if (states[i].type == currentStatus) {
+          highestReachedIdx = i;
+          break;
+        }
+      }
+    }
     
-    final isInProgress = [
-      BookingStatusType.inProgress,
-      BookingStatusType.completed
-    ].contains(currentStatus);
-    
-    // "Testing" is not an official state in our BookingModel enum, but IN_PROGRESS covers it. 
-    // If the booking is completed, we consider it done.
-    final isCompleted = currentStatus == BookingStatusType.completed;
+    // If cancelled or failed, we just show up to the point it got to, plus the failure state at the end.
+    final isFailedOrCancelled = currentStatus == BookingStatusType.failed || currentStatus == BookingStatusType.cancelled;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -45,46 +60,54 @@ class JobProgressTimeline extends StatelessWidget {
               ),
         ),
         const SizedBox(height: AppSpacing.md),
-        _buildTimelineNode(
-          context,
-          title: 'Arrived',
-          isCompleted: isArrived,
-          isActive: currentStatus == BookingStatusType.arrived,
-          time: _getEventTime('ARRIVED'),
-          isLast: false,
-        ),
-        _buildTimelineNode(
-          context,
-          title: 'In Progress',
-          isCompleted: isInProgress,
-          isActive: currentStatus == BookingStatusType.inProgress && !isCompleted,
-          time: _getEventTime('IN_PROGRESS'),
-          isLast: false,
-        ),
-        _buildTimelineNode(
-          context,
-          title: 'Testing',
-          isCompleted: isCompleted,
-          isActive: false, // Testing is implicit in completed step for now
-          time: null,
-          isLast: false,
-        ),
-        _buildTimelineNode(
-          context,
-          title: 'Completed',
-          isCompleted: isCompleted,
-          isActive: currentStatus == BookingStatusType.completed,
-          time: _getEventTime('COMPLETED'),
-          isLast: true,
-        ),
+        
+        ...List.generate(states.length, (index) {
+          final state = states[index];
+          final isCompleted = index <= highestReachedIdx;
+          final isActive = index == highestReachedIdx && !isFailedOrCancelled;
+          final time = _getEventTime(state.rawStatuses);
+          
+          return _buildTimelineNode(
+            context,
+            title: state.title,
+            isCompleted: isCompleted,
+            isActive: isActive,
+            time: time,
+            isLast: index == states.length - 1 && !isFailedOrCancelled,
+            isFuture: index > highestReachedIdx,
+          );
+        }),
+        
+        if (isFailedOrCancelled)
+          _buildTimelineNode(
+            context,
+            title: currentStatus == BookingStatusType.cancelled ? 'Cancelled' : 'Failed',
+            isCompleted: false,
+            isActive: true, // Mark the failed state as active/red
+            time: _getLastEventTime(),
+            isLast: true,
+            isFuture: false,
+            isError: true,
+          ),
       ],
     );
   }
 
-  String? _getEventTime(String status) {
-    final event = booking.timeline.where((e) => e.status == status).firstOrNull;
+  bool _hasEvent(List<String> rawStatuses) {
+    return booking.timeline.any((e) => rawStatuses.contains(e.status));
+  }
+
+  String? _getEventTime(List<String> rawStatuses) {
+    final event = booking.timeline.where((e) => rawStatuses.contains(e.status)).firstOrNull;
     if (event != null) {
       return DateFormat('hh:mm a').format(event.createdAt);
+    }
+    return null;
+  }
+  
+  String? _getLastEventTime() {
+    if (booking.timeline.isNotEmpty) {
+      return DateFormat('hh:mm a').format(booking.timeline.last.createdAt);
     }
     return null;
   }
@@ -94,11 +117,14 @@ class JobProgressTimeline extends StatelessWidget {
     required String title,
     required bool isCompleted,
     required bool isActive,
+    required bool isFuture,
     required String? time,
     required bool isLast,
+    bool isError = false,
   }) {
-    final primaryColor = AppColors.success;
+    final primaryColor = isError ? AppColors.error : AppColors.success;
     final inactiveColor = AppColors.textSecondary.withOpacity(0.3);
+    final dotColor = isCompleted ? primaryColor : (isActive ? (isError ? AppColors.error : AppColors.buttonPrimary) : AppColors.surface);
 
     return IntrinsicHeight(
       child: Row(
@@ -106,17 +132,17 @@ class JobProgressTimeline extends StatelessWidget {
         children: [
           // Node icon + line
           SizedBox(
-            width: 24,
+            width: 28,
             child: Column(
               children: [
                 Container(
-                  width: 24,
-                  height: 24,
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
-                    color: isCompleted ? primaryColor : AppColors.surface,
+                    color: dotColor,
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: isCompleted ? primaryColor : inactiveColor,
+                      color: isCompleted || isActive ? dotColor : inactiveColor,
                       width: 2,
                     ),
                   ),
@@ -125,15 +151,15 @@ class JobProgressTimeline extends StatelessWidget {
                       : (isActive
                           ? Center(
                               child: Container(
-                                width: 8,
-                                height: 8,
+                                width: 10,
+                                height: 10,
                                 decoration: BoxDecoration(
-                                  color: AppColors.buttonPrimary,
+                                  color: isError ? AppColors.error : AppColors.surface,
                                   shape: BoxShape.circle,
                                 ),
                               ),
                             )
-                          : const Icon(Icons.remove, color: AppColors.textSecondary, size: 16)),
+                          : const SizedBox()),
                 ),
                 if (!isLast)
                   Expanded(
@@ -157,13 +183,13 @@ class JobProgressTimeline extends StatelessWidget {
                     title,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: isActive || isCompleted ? FontWeight.bold : FontWeight.normal,
-                          color: isCompleted
-                              ? AppColors.textPrimary
-                              : (isActive ? AppColors.textPrimary : AppColors.textSecondary),
+                          color: isError 
+                              ? AppColors.error 
+                              : (isCompleted || isActive ? AppColors.textPrimary : AppColors.textSecondary),
                         ),
                   ),
                   Text(
-                    time ?? (isActive ? 'In Progress' : 'Pending'),
+                    time ?? (isFuture ? '' : (isActive ? 'Now' : '')),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppColors.textSecondary,
                         ),
@@ -176,4 +202,12 @@ class JobProgressTimeline extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TimelineState {
+  final String title;
+  final BookingStatusType type;
+  final List<String> rawStatuses;
+
+  _TimelineState(this.title, this.type, this.rawStatuses);
 }

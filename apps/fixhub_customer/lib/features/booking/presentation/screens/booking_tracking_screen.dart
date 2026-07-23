@@ -7,6 +7,7 @@ import '../../../../core/widgets/fixhub_app_bar.dart';
 import '../../../../core/widgets/fixhub_error_state.dart';
 import '../../../../core/widgets/fixhub_status_chip.dart';
 import '../providers/booking_provider.dart';
+import '../providers/tracking_provider.dart';
 import '../widgets/technician_contact_card.dart';
 
 class BookingTrackingScreen extends ConsumerStatefulWidget {
@@ -24,6 +25,18 @@ class _BookingTrackingScreenState extends ConsumerState<BookingTrackingScreen> {
   @override
   Widget build(BuildContext context) {
     final bookingAsync = ref.watch(bookingDetailProvider(widget.bookingId));
+    final trackingState = ref.watch(bookingTrackingProvider(widget.bookingId));
+
+    // Animate map when live location changes
+    ref.listen<TrackingState>(bookingTrackingProvider(widget.bookingId), (previous, next) {
+      if (next.technicianLocation != null && 
+          previous?.technicianLocation != next.technicianLocation &&
+          _mapController != null) {
+        _mapController!.animateCamera(
+          CameraUpdate.newLatLng(next.technicianLocation!),
+        );
+      }
+    });
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -36,10 +49,10 @@ class _BookingTrackingScreenState extends ConsumerState<BookingTrackingScreen> {
           final customerLat = booking.address?.latitude;
           final customerLng = booking.address?.longitude;
           
-          final techLat = booking.technician != null && booking.technician!['latitude'] != null
+          final initialTechLat = booking.technician != null && booking.technician!['latitude'] != null
               ? double.tryParse(booking.technician!['latitude'].toString())
               : null;
-          final techLng = booking.technician != null && booking.technician!['longitude'] != null
+          final initialTechLng = booking.technician != null && booking.technician!['longitude'] != null
               ? double.tryParse(booking.technician!['longitude'].toString())
               : null;
 
@@ -47,9 +60,11 @@ class _BookingTrackingScreenState extends ConsumerState<BookingTrackingScreen> {
               ? LatLng(customerLat, customerLng)
               : const LatLng(28.6139, 77.2090); // Default to Delhi if missing
 
-          final techPos = (techLat != null && techLng != null)
-              ? LatLng(techLat, techLng)
-              : null;
+          // Priority: Live Socket Location -> HTTP Initial Location
+          final techPos = trackingState.technicianLocation ?? 
+              ((initialTechLat != null && initialTechLng != null)
+                  ? LatLng(initialTechLat, initialTechLng)
+                  : null);
 
           final initialCameraPos = isArrived ? customerPos : (techPos ?? customerPos);
 

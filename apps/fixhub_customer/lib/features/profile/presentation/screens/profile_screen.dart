@@ -6,6 +6,7 @@ import '../../../../core/config/theme/app_spacing.dart';
 import '../../../../core/config/theme/app_radius.dart';
 import '../../../../core/widgets/fixhub_button.dart';
 import '../../../../core/widgets/fixhub_dialog.dart';
+import '../../../../core/widgets/fixhub_network_image.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/widgets/fixhub_status_chip.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -92,31 +93,34 @@ class ProfileScreen extends ConsumerWidget {
                   // Avatar + name
                   Row(
                     children: [
-                      // Gradient avatar
-                      Container(
-                        width: AppSpacing.avatarSizeLarge,
-                        height: AppSpacing.avatarSizeLarge,
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF2B2111), Color(0xFF6B5A3E)],
+                      // Avatar — shows uploaded photo or gradient initial
+                      Builder(builder: (context) {
+                        final avatarUrl = user?.profile?.profilePictureUrl;
+                        return GestureDetector(
+                          onTap: () => context.push(RouteNames.editProfile),
+                          child: Container(
+                            width: AppSpacing.avatarSizeLarge,
+                            height: AppSpacing.avatarSizeLarge,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: AppColors.border, width: 0.5),
+                            ),
+                            child: ClipOval(
+                              child: avatarUrl != null && avatarUrl.isNotEmpty
+                                  ? FixHubNetworkImage(
+                                      avatarUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) =>
+                                          _InitialAvatarWidget(
+                                              firstLetter: firstLetter),
+                                    )
+                                  : _InitialAvatarWidget(
+                                      firstLetter: firstLetter),
+                            ),
                           ),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            firstLetter,
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineLarge
-                                ?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                        ),
-                      ),
+                        );
+                      }),
                       const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Column(
@@ -392,6 +396,33 @@ class _MenuItem extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _InitialAvatarWidget extends StatelessWidget {
+  const _InitialAvatarWidget({required this.firstLetter});
+
+  final String firstLetter;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF2B2111), Color(0xFF6B5A3E)],
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        firstLetter,
+        style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
       ),
     );
   }
