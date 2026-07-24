@@ -27,9 +27,16 @@ class BookingDetailScreen extends ConsumerWidget {
       appBar: const FixHubAppBar(title: 'Booking Details'),
       body: bookingAsync.when(
         data: (booking) {
-          return ListView(
-            padding: const EdgeInsets.all(AppSpacing.screenPadding),
-            children: [
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(bookingDetailProvider(bookingId));
+              try {
+                await ref.read(bookingDetailProvider(bookingId).future);
+              } catch (_) {}
+            },
+            child: ListView(
+              padding: const EdgeInsets.all(AppSpacing.screenPadding),
+              children: [
               // Header Status
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -445,7 +452,7 @@ class BookingDetailScreen extends ConsumerWidget {
               // Action Buttons
               const SizedBox(height: AppSpacing.lg),
               
-              if ([BookingStatusType.assigned, BookingStatusType.enRoute, BookingStatusType.arrived].contains(booking.statusType))
+              if ([BookingStatusType.assigned, BookingStatusType.enRoute].contains(booking.statusType))
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -462,7 +469,7 @@ class BookingDetailScreen extends ConsumerWidget {
                   ),
                 ),
 
-              if (booking.statusType == BookingStatusType.inProgress)
+              if ([BookingStatusType.arrived, BookingStatusType.inProgress].contains(booking.statusType))
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -531,22 +538,23 @@ class BookingDetailScreen extends ConsumerWidget {
                       child: const Text('Rate Service'),
                     ),
                   ),
-              const SizedBox(height: AppSpacing.xxl),
-            ],
-          );
-        },
-        loading: () => Padding(
-          padding: const EdgeInsets.all(AppSpacing.screenPadding),
-          child: Column(
-            children: [
-              FixHubShimmer.card(height: 120),
-              const SizedBox(height: AppSpacing.md),
-              FixHubShimmer.card(height: 100),
-              const SizedBox(height: AppSpacing.md),
-              FixHubShimmer.card(height: 100),
+              const SizedBox(height: AppSpacing.xxxl),
             ],
           ),
+        );
+      },
+      loading: () => Padding(
+        padding: const EdgeInsets.all(AppSpacing.screenPadding),
+        child: Column(
+          children: [
+            FixHubShimmer.card(height: 120),
+            const SizedBox(height: AppSpacing.md),
+            FixHubShimmer.card(height: 100),
+            const SizedBox(height: AppSpacing.md),
+            FixHubShimmer.card(height: 100),
+          ],
         ),
+      ),
         error: (error, _) => FixHubErrorState(
           onRetry: () => ref.invalidate(bookingDetailProvider(bookingId)),
         ),

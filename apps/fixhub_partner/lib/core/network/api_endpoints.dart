@@ -59,6 +59,13 @@ class ApiEndpoints {
   static const String technicianRatings = '/technicians/ratings';
   static const String technicianRatingsSummary = '/technicians/ratings/summary';
 
+  // ── Catalog & Public ────────────────────────────────────────────
+  static const String catalogCategories = '/catalog/categories';
+  static String catalogCategory(String id) => '/catalog/categories/$id';
+  static const String catalogServices = '/catalog/services';
+  static String catalogService(String id) => '/catalog/services/$id';
+  static const String serviceAreas = '/service-areas';
+
   // ── Notifications ───────────────────────────────────────────────
   static const String notifications = '/notifications';
   static String notificationRead(String id) => '/notifications/$id/read';

@@ -9,6 +9,7 @@ import '../../../core/config/theme/app_radius.dart';
 import '../../../core/widgets/fp_button.dart';
 import '../presentation/auth_provider.dart';
 import '../domain/auth_state.dart';
+import '../../profile/data/profile_repository.dart';
 
 class OtpScreen extends ConsumerStatefulWidget {
   final String phone;
@@ -122,10 +123,22 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AuthState>(authProvider, (_, state) {
+    ref.listen<AuthState>(authProvider, (_, state) async {
       if (!mounted) return;
       if (state is AuthAuthenticated) {
-        context.go('/dashboard');
+        // Route to setup wizard if profile is not complete (first-time login)
+        try {
+          final profile =
+              await ref.read(profileRepositoryProvider).getProfile();
+          if (!mounted) return;
+          if (profile.isProfileComplete) {
+            context.go('/dashboard');
+          } else {
+            context.go('/setup');
+          }
+        } catch (_) {
+          if (mounted) context.go('/dashboard');
+        }
       }
     });
 

@@ -221,21 +221,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                 const SizedBox(height: AppSpacing.xl),
 
+                // ── Specializations ──────────────────────────────
+                _SpecializationsCard(profile: profile),
+
+                const SizedBox(height: AppSpacing.md),
+
+                // ── Service Areas ─────────────────────────────────
+                _ServiceAreasCard(profile: profile),
+
+                const SizedBox(height: AppSpacing.xl),
+
                 // ── Account ──────────────────────────────────────
                 FpCard(
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: [
-                      _ActionTile(
-                        icon: Icons.folder_outlined,
-                        label: 'Documents',
-                        onTap: () => context.push('/documents'),
-                      ),
-                      const Divider(
-                        height: 1,
-                        indent: 56,
-                        color: AppColors.divider,
-                      ),
                       _ActionTile(
                         icon: Icons.settings_outlined,
                         label: 'Settings',
@@ -538,6 +538,213 @@ class _ActionTile extends StatelessWidget {
       contentPadding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.base,
         vertical: AppSpacing.xs,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Specializations card
+// ─────────────────────────────────────────────────────────────────
+
+class _SpecializationsCard extends StatelessWidget {
+  final dynamic profile;
+  const _SpecializationsCard({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    final specs = profile.specializations as List<dynamic>;
+
+    return FpCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.build_outlined,
+                size: 18,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'My Specializations',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => context.push('/edit-specializations'),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryContainer,
+                    borderRadius: AppRadius.pill,
+                  ),
+                  child: const Text(
+                    'Edit',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (specs.isEmpty)
+            Text(
+              'No specializations added yet. Tap Edit to add.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+            )
+          else
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: specs.map((s) {
+                final name = (s is Map<String, dynamic>)
+                    ? (s['subService']?['name'] ?? s['name'] ?? '')
+                    : s.toString();
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryContainer,
+                    borderRadius: AppRadius.pill,
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    name as String,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Service Areas card
+// ─────────────────────────────────────────────────────────────────
+
+class _ServiceAreasCard extends StatelessWidget {
+  final dynamic profile;
+  const _ServiceAreasCard({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    final areas = profile.serviceAreas as List<dynamic>;
+
+    return FpCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.location_on_outlined,
+                size: 18,
+                color: AppColors.info,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'My Service Areas',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => context.push('/edit-service-areas'),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.infoLight,
+                    borderRadius: AppRadius.pill,
+                  ),
+                  child: const Text(
+                    'Edit',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.info,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (areas.isEmpty)
+            Text(
+              'No service areas added yet. Tap Edit to add.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+            )
+          else
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: areas.map((a) {
+                final name = (a is Map<String, dynamic>)
+                    ? (a['city'] ?? a['name'] ?? '')
+                    : a.toString();
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.infoLight,
+                    borderRadius: AppRadius.pill,
+                    border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.location_on_rounded,
+                        size: 12,
+                        color: AppColors.info,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        name as String,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.info,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+        ],
       ),
     );
   }

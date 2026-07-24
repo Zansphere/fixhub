@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../core/network/dio_client.dart';
@@ -24,32 +25,36 @@ class AuthRepository {
     return _unwrap(response.data);
   }
 
-  /// POST /auth/verify-otp — always TECHNICIAN role for partner app
-  Future<AuthUser> verifyOtp(String phone, String otp) async {
+  /// POST /auth/verify-otp — returns raw response map.
+  /// Token storage is now handled by the provider (single responsibility).
+  Future<Map<String, dynamic>> verifyOtp(String phone, String otp) async {
     final response = await _dio.post(
       ApiEndpoints.verifyOtp,
       data: {'phone': phone, 'otp': otp, 'role': 'TECHNICIAN'},
     );
-
-    final data = _unwrap(response.data);
-    final accessToken = data['accessToken'] as String;
-    final refreshToken = data['refreshToken'] as String;
-    final userData = data['user'] as Map<String, dynamic>;
-
-    await _storage.saveTokens(
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-    );
-    await _storage.saveUserData(userData);
-
-    return AuthUser.fromJson(userData);
+    return _unwrap(response.data);
   }
 
-  /// GET /auth/me
-  Future<AuthUser> getMe() async {
+  /// GET /auth/me — fetch current user from server
+  Future<AuthUser> getCurrentUser() async {
     final response = await _dio.get(ApiEndpoints.me);
     final data = _unwrap(response.data);
     return AuthUser.fromJson(data);
+  }
+
+  /// Try to load user from local Hive cache (instant, no network).
+  /// Returns null if no cached data exists.
+  Future<AuthUser?> getCachedUser() async {
+    try {
+      final userData = await _storage.getUserData();
+      if (userData == null || userData.isEmpty) return null;
+      // Ensure essential fields exist
+      if (userData['id'] == null || userData['phone'] == null) return null;
+      return AuthUser.fromJson(userData);
+    } catch (e) {
+      debugPrint('[AuthRepository] getCachedUser failed: $e');
+      return null;
+    }
   }
 
   /// POST /auth/logout
@@ -58,12 +63,11 @@ class AuthRepository {
       await _dio.post(ApiEndpoints.logout);
     } catch (_) {
       // Always clear local storage even if logout API fails
-    } finally {
-      await _storage.clearAll();
     }
+    // Storage clearing is now done by the provider
   }
 
-  /// POST /auth/device — register FCM token
+  /// POST /auth/device — register FCM token with correct backend DTO shape
   Future<void> registerDevice(String deviceToken, String platform) async {
     try {
       await _dio.post(

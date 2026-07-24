@@ -5,6 +5,7 @@ import '../../../core/config/theme/app_colors.dart';
 import '../../../core/config/theme/app_spacing.dart';
 import '../presentation/auth_provider.dart';
 import '../domain/auth_state.dart';
+import '../../profile/data/profile_repository.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -36,7 +37,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _init() async {
-    // Small delay for splash to display
     await Future.delayed(const Duration(milliseconds: 1800));
     if (!mounted) return;
     await ref.read(authProvider.notifier).checkAuthStatus();
@@ -50,11 +50,24 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AuthState>(authProvider, (_, state) {
+    ref.listen<AuthState>(authProvider, (_, state) async {
       if (!mounted) return;
       switch (state) {
         case AuthAuthenticated():
-          context.go('/dashboard');
+          // Check if profile is complete before routing to dashboard
+          try {
+            final profile =
+                await ref.read(profileRepositoryProvider).getProfile();
+            if (!mounted) return;
+            if (profile.isProfileComplete) {
+              context.go('/dashboard');
+            } else {
+              context.go('/setup');
+            }
+          } catch (_) {
+            // If we can't fetch profile, go to dashboard and let it handle
+            if (mounted) context.go('/dashboard');
+          }
         case AuthUnauthenticated():
           context.go('/login');
         default:

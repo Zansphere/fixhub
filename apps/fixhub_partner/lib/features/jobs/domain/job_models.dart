@@ -149,6 +149,14 @@ class Job {
   final String? description;
   final double totalAmount;
   final String? notes;
+  // Price revision fields
+  final double? revisedAmount;
+  final String? priceRevisionNote;
+  // Cancellation/failure fields
+  final DateTime? cancelledAt;
+  final String? cancelReason;
+  final DateTime? failedAt;
+  final String? failureReason;
   final JobCustomer customer;
   final JobSubService subService;
   final JobAddress address;
@@ -166,6 +174,12 @@ class Job {
     this.description,
     required this.totalAmount,
     this.notes,
+    this.revisedAmount,
+    this.priceRevisionNote,
+    this.cancelledAt,
+    this.cancelReason,
+    this.failedAt,
+    this.failureReason,
     required this.customer,
     required this.subService,
     required this.address,
@@ -184,6 +198,18 @@ class Job {
     description: json['description'] as String?,
     totalAmount: double.tryParse(json['totalAmount'].toString()) ?? 0,
     notes: json['notes'] as String?,
+    revisedAmount: json['revisedAmount'] != null
+        ? double.tryParse(json['revisedAmount'].toString())
+        : null,
+    priceRevisionNote: json['priceRevisionNote'] as String?,
+    cancelledAt: json['cancelledAt'] != null
+        ? DateTime.tryParse(json['cancelledAt'] as String)
+        : null,
+    cancelReason: json['cancelReason'] as String?,
+    failedAt: json['failedAt'] != null
+        ? DateTime.tryParse(json['failedAt'] as String)
+        : null,
+    failureReason: json['failureReason'] as String?,
     customer: JobCustomer.fromJson(json['customer'] as Map<String, dynamic>),
     subService: JobSubService.fromJson(
       json['subService'] as Map<String, dynamic>,
@@ -205,12 +231,69 @@ class Job {
         : null,
   );
 
+  /// An active job includes PRICE_REVISION_PENDING (tech is waiting for customer)
   bool get isActive =>
-      const ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].contains(status);
+      const ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'PRICE_REVISION_PENDING']
+          .contains(status);
 
   bool get isAssigned => status == 'ASSIGNED';
   bool get isCompleted => status == 'COMPLETED';
-  bool get isCancelled => status == 'CANCELLED' || status == 'FAILED';
+  bool get isCancelled => status == 'CANCELLED';
+  bool get isFailed => status == 'FAILED';
+  bool get isPriceRevisionPending => status == 'PRICE_REVISION_PENDING';
+  bool get isEnRoute => status == 'EN_ROUTE';
+  bool get isArrived => status == 'ARRIVED';
+  bool get isInProgress => status == 'IN_PROGRESS';
+
+  /// The effective price (revised if approved, otherwise original)
+  double get effectiveAmount => revisedAmount ?? totalAmount;
+
+  /// Human-readable status label
+  String get displayStatus => status.replaceAll('_', ' ');
+
+  Job copyWith({
+    String? id,
+    String? bookingNumber,
+    String? status,
+    DateTime? scheduledDate,
+    String? scheduledSlot,
+    String? description,
+    double? totalAmount,
+    String? notes,
+    double? revisedAmount,
+    String? priceRevisionNote,
+    JobCustomer? customer,
+    JobSubService? subService,
+    JobAddress? address,
+    List<JobMedia>? media,
+    List<JobTimelineEntry>? timeline,
+    DateTime? createdAt,
+    DateTime? completedAt,
+  }) {
+    return Job(
+      id: id ?? this.id,
+      bookingNumber: bookingNumber ?? this.bookingNumber,
+      status: status ?? this.status,
+      scheduledDate: scheduledDate ?? this.scheduledDate,
+      scheduledSlot: scheduledSlot ?? this.scheduledSlot,
+      description: description ?? this.description,
+      totalAmount: totalAmount ?? this.totalAmount,
+      notes: notes ?? this.notes,
+      revisedAmount: revisedAmount ?? this.revisedAmount,
+      priceRevisionNote: priceRevisionNote ?? this.priceRevisionNote,
+      cancelledAt: cancelledAt,
+      cancelReason: cancelReason,
+      failedAt: failedAt,
+      failureReason: failureReason,
+      customer: customer ?? this.customer,
+      subService: subService ?? this.subService,
+      address: address ?? this.address,
+      media: media ?? this.media,
+      timeline: timeline ?? this.timeline,
+      createdAt: createdAt ?? this.createdAt,
+      completedAt: completedAt ?? this.completedAt,
+    );
+  }
 }
 
 class PaginatedJobs {

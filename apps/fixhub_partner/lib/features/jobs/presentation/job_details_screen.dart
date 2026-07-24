@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../../core/config/theme/app_colors.dart';
 import '../../../core/config/theme/app_spacing.dart';
 import '../../../core/config/theme/app_radius.dart';
@@ -14,6 +15,7 @@ import '../../../core/widgets/fp_offline_banner.dart';
 import '../../../core/widgets/fp_status_chip.dart';
 import '../domain/job_models.dart';
 import 'job_provider.dart';
+import 'price_revision_sheet.dart';
 
 class JobDetailsScreen extends ConsumerWidget {
   final String jobId;
@@ -58,6 +60,7 @@ class _JobDetailsBodyState extends ConsumerState<_JobDetailsBody> {
       'EN_ROUTE' => 'ARRIVED',
       'ARRIVED' => 'IN_PROGRESS',
       'IN_PROGRESS' => 'COMPLETED',
+      'PRICE_REVISION_PENDING' => '', // Cannot transition — waiting for customer
       _ => '',
     };
   }
@@ -69,35 +72,157 @@ class _JobDetailsBodyState extends ConsumerState<_JobDetailsBody> {
       'EN_ROUTE' => '📍 Mark Arrived',
       'ARRIVED' => '🔧 Start Work',
       'IN_PROGRESS' => '✅ Complete Job',
+      'PRICE_REVISION_PENDING' => '⏳ Waiting for Customer...',
       _ => '',
     };
   }
 
+  bool get _isPriceRevisionPending => widget.job.status == 'PRICE_REVISION_PENDING';
+
   Future<void> _updateStatus() async {
+    final nextStatus = _nextStatus;
+    if (nextStatus.isEmpty) return;
+
+    if (nextStatus == 'COMPLETED') {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Complete Job?'),
+          content: const Text(
+            'Mark this job as completed? This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(c, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+              child: const Text('Complete'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true || !mounted) return;
+    }
+
     setState(() => _isUpdating = true);
+
+    double? lat, lng;
+    if (nextStatus == 'EN_ROUTE' || nextStatus == 'ARRIVED') {
+      try {
+        final perm = await Geolocator.checkPermission();
+        if (perm == LocationPermission.whileInUse ||
+            perm == LocationPermission.always) {
+          final pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+            ),
+          );
+          lat = pos.latitude;
+          lng = pos.longitude;
+        }
+      } catch (_) {}
+    }
+
     try {
-      await ref
-          .read(activeJobProvider.notifier)
-          .updateStatus(widget.job.id, _nextStatus);
-      if (mounted && _nextStatus == 'COMPLETED') {
+      await ref.read(activeJobProvider.notifier).updateStatus(
+            widget.job.id,
+            nextStatus,
+            latitude: lat,
+            longitude: lng,
+          );
+      if (mounted && nextStatus == 'COMPLETED') {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('🎉 Job completed successfully!'),
+            content: Text('Job completed successfully!'),
             backgroundColor: AppColors.success,
           ),
         );
         context.pop();
+      } else if (mounted && nextStatus == 'EN_ROUTE') {
+        // Navigate to the en-route screen for live tracking + navigation
+        context.push('/job-enroute/${widget.job.id}');
       } else if (mounted) {
         ref.invalidate(jobDetailsProvider(widget.job.id));
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Status updated to $_nextStatus')),
+          SnackBar(
+              content: Text(
+                  'Status updated to ${nextStatus.replaceAll('_', ' ')}')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Failed to update status. Please try again.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUpdating = false);
+    }
+  }
+
+  Future<void> _reportFailure() async {
+    final reasonCtrl = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Report Failure'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Describe why this job could not be completed:',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: reasonCtrl,
+              maxLines: 3,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'e.g. Customer not available, missing spare parts...',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(c, reasonCtrl.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null || reason.isEmpty || !mounted) return;
+
+    setState(() => _isUpdating = true);
+    try {
+      await ref.read(activeJobProvider.notifier).updateStatus(
+            widget.job.id,
+            'FAILED',
+            note: reason,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Job reported as failed.')),
+        );
+        context.pop();
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to report. Please try again.'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -125,6 +250,10 @@ class _JobDetailsBodyState extends ConsumerState<_JobDetailsBody> {
   Widget build(BuildContext context) {
     final job = widget.job;
     final hasAction = _nextStatus.isNotEmpty;
+    final isInProgress = job.status == 'IN_PROGRESS';
+    final canFail = const ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS']
+        .contains(job.status);
+    final isPendingRevision = _isPriceRevisionPending;
 
     return Column(
       children: [
@@ -200,7 +329,67 @@ class _JobDetailsBodyState extends ConsumerState<_JobDetailsBody> {
 
                 const SizedBox(height: AppSpacing.base),
 
-                // ── Schedule ─────────────────────────────────────
+                // ── Price Revision Pending Banner ─────────────────
+                if (isPendingRevision && job.revisedAmount != null) ...[
+                  FpCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.warning.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.hourglass_top_rounded,
+                                color: AppColors.warning,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Price Revision Pending',
+                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Waiting for customer to approve ₹${job.revisedAmount!.toStringAsFixed(0)}',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (job.priceRevisionNote != null && job.priceRevisionNote!.isNotEmpty) ...[
+                          const SizedBox(height: AppSpacing.sm),
+                          const Divider(color: AppColors.divider, height: 1),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            'Your note: ${job.priceRevisionNote}',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.textSecondary,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.base),
+                ],
+
                 _Section(
                   title: 'Schedule',
                   child: Column(
@@ -344,8 +533,8 @@ class _JobDetailsBodyState extends ConsumerState<_JobDetailsBody> {
           ),
         ),
 
-        // ── Action Button ─────────────────────────────────────────
-        if (hasAction)
+        // ── Action Bar ──────────────────────────────────────────
+        if (hasAction || canFail || isPendingRevision)
           Container(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.screenPadding,
@@ -357,10 +546,75 @@ class _JobDetailsBodyState extends ConsumerState<_JobDetailsBody> {
               color: AppColors.surface,
               border: Border(top: BorderSide(color: AppColors.border)),
             ),
-            child: FpButton(
-              label: _nextStatusLabel,
-              isLoading: _isUpdating,
-              onPressed: _updateStatus,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Price revision button (only when IN_PROGRESS)
+                if (isInProgress) ...[
+                  FpButton(
+                    label: '💰 Propose Price Revision',
+                    variant: FpButtonVariant.secondary,
+                    onPressed: () => showPriceRevisionSheet(context, job),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
+
+                // Main CTA
+                Row(
+                  children: [
+                    if (hasAction)
+                      Expanded(
+                        child: FpButton(
+                          label: _nextStatusLabel,
+                          isLoading: _isUpdating,
+                          onPressed: _updateStatus,
+                        ),
+                      )
+                    else if (isPendingRevision)
+                      Expanded(
+                        child: FpButton(
+                          label: _nextStatusLabel,
+                          onPressed: null, // Disabled — waiting for customer
+                        ),
+                      ),
+
+                    // Report Failure overflow
+                    if (canFail) ...[
+                      if (hasAction || isPendingRevision) const SizedBox(width: AppSpacing.sm),
+                      Container(
+                        height: AppSpacing.buttonHeight,
+                        width: AppSpacing.buttonHeight,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.border),
+                          borderRadius: AppRadius.button,
+                        ),
+                        child: PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert_rounded,
+                              color: AppColors.textSecondary),
+                          onSelected: (v) {
+                            if (v == 'fail') _reportFailure();
+                          },
+                          itemBuilder: (_) => [
+                            const PopupMenuItem(
+                              value: 'fail',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.cancel_outlined,
+                                      color: AppColors.error, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Report Failure',
+                                      style: TextStyle(
+                                          color: AppColors.error)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
             ),
           ),
       ],

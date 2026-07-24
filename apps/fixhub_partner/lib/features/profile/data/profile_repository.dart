@@ -56,6 +56,14 @@ class TechnicianProfile {
 
   String get displayName => name ?? phone ?? 'Technician';
   bool get isVerified => verificationStatus == 'VERIFIED';
+
+  /// Profile is considered complete when the technician has set a name,
+  /// selected at least one specialization, and at least one service area.
+  bool get isProfileComplete =>
+      isVerified ||
+      ((name?.isNotEmpty ?? false) &&
+          specializations.isNotEmpty &&
+          serviceAreas.isNotEmpty);
 }
 
 class ProfileRepository {
@@ -105,6 +113,45 @@ class ProfileRepository {
       ApiEndpoints.technicianLocation,
       data: {'latitude': latitude, 'longitude': longitude},
     );
+  }
+
+  /// POST /technicians/specializations — replaces existing specializations
+  Future<void> updateSpecializations(List<String> subServiceIds) async {
+    await _dio.post(
+      ApiEndpoints.technicianSpecializations,
+      data: {'subServiceIds': subServiceIds},
+    );
+  }
+
+  /// PUT /technicians/service-areas — syncs service areas
+  Future<void> updateServiceAreas(List<String> areaIds) async {
+    await _dio.put(
+      ApiEndpoints.technicianServiceAreas,
+      data: {'serviceAreaIds': areaIds},
+    );
+  }
+
+  /// GET /technicians/specializations
+  Future<List<dynamic>> getSpecializations() async {
+    final response = await _dio.get(ApiEndpoints.technicianSpecializations);
+    final data = _unwrap(response.data);
+    if (data is List) return data;
+    return [];
+  }
+
+  /// GET /technicians/service-areas
+  Future<List<dynamic>> getServiceAreas() async {
+    final response = await _dio.get(ApiEndpoints.technicianServiceAreas);
+    final data = _unwrap(response.data);
+    if (data is List) return data;
+    return [];
+  }
+
+  dynamic _unwrap(dynamic data) {
+    if (data is Map<String, dynamic> && data.containsKey('data')) {
+      return data['data'];
+    }
+    return data;
   }
 
   Map<String, dynamic> _unwrapMap(dynamic data) {

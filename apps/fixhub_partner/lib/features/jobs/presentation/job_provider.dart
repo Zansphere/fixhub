@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/job_repository.dart';
 import '../domain/job_models.dart';
@@ -51,14 +52,22 @@ class ActiveJobNotifier extends AsyncNotifier<Job?> {
 
   Future<Job?> acceptJob(String id) async {
     state = const AsyncValue.loading();
-    final job = await _repository.acceptJob(id);
-    state = AsyncValue.data(job);
-    return job;
+    state = await AsyncValue.guard(() async {
+      final job = await _repository.acceptJob(id);
+      // Invalidate related providers so lists refresh
+      _invalidateRelatedProviders();
+      return job;
+    });
+    return state.value;
   }
 
   Future<void> rejectJob(String id, String reason) async {
-    await _repository.rejectJob(id, reason);
-    await refresh();
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      await _repository.rejectJob(id, reason);
+      _invalidateRelatedProviders();
+      return _repository.getCurrentJob();
+    });
   }
 
   Future<Job?> updateStatus(
@@ -69,14 +78,45 @@ class ActiveJobNotifier extends AsyncNotifier<Job?> {
     double? longitude,
   }) async {
     state = const AsyncValue.loading();
-    final job = await _repository.updateJobStatus(
-      id,
-      status,
-      note: note,
-      latitude: latitude,
-      longitude: longitude,
-    );
-    state = AsyncValue.data(job);
-    return job;
+    state = await AsyncValue.guard(() async {
+      final job = await _repository.updateJobStatus(
+        id,
+        status,
+        note: note,
+        latitude: latitude,
+        longitude: longitude,
+      );
+      // Invalidate related providers so they pick up the new status
+      _invalidateRelatedProviders();
+      // Also invalidate the specific job details
+      ref.invalidate(jobDetailsProvider(id));
+      return job;
+    });
+    return state.value;
+  }
+
+  Future<Job?> proposeRevision(
+    String id,
+    double revisedAmount,
+    String note,
+  ) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      final job = await _repository.proposeRevision(id, revisedAmount, note: note);
+      ref.invalidate(jobDetailsProvider(id));
+      return job;
+    });
+    return state.value;
+  }
+
+  /// Invalidate all list providers that might show stale data after a status change.
+  void _invalidateRelatedProviders() {
+    ref.invalidate(currentJobProvider);
+    ref.invalidate(upcomingJobsProvider);
+    ref.invalidate(jobHistoryProvider);
+    // myJobsProvider is family-based; invalidate common status filters
+    ref.invalidate(myJobsProvider(null));
+    ref.invalidate(myJobsProvider('ASSIGNED'));
+    ref.invalidate(myJobsProvider('ACCEPTED'));
   }
 }

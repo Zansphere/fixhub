@@ -1,58 +1,159 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/storage/local_storage.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_state.dart';
 
-final authProvider = NotifierProvider<AuthNotifier, AuthState>(AuthNotifier.new);
+final authProvider = NotifierProvider<AuthNotifier, AuthState>(() {
+  return AuthNotifier();
+});
 
 class AuthNotifier extends Notifier<AuthState> {
-  late final AuthRepository _repository;
-  late final LocalStorage _storage;
-
   @override
-  AuthState build() {
-    _repository = ref.watch(authRepositoryProvider);
-    _storage = ref.watch(localStorageProvider);
-    return const AuthInitial();
-  }
+  AuthState build() => const AuthInitial();
 
-  /// Called on app startup — check if already logged in
+  AuthRepository get _repo => ref.read(authRepositoryProvider);
+  LocalStorage get _storage => ref.read(localStorageProvider);
+
+  /// Check for existing session on app startup.
+  /// Tries cached user first for instant UI, then refreshes from server.
   Future<void> checkAuthStatus() async {
     state = const AuthLoading();
     try {
+      // 1. Try cached user for instant feedback
+      final cachedUser = await _repo.getCachedUser();
+      if (cachedUser != null) {
+        state = AuthAuthenticated(cachedUser);
+        // 2. Background refresh from server (non-blocking)
+        _refreshProfileInBackground();
+        return;
+      }
+
+      // 3. No cached user — check if tokens exist
       final isLoggedIn = await _storage.isLoggedIn();
       if (!isLoggedIn) {
         state = const AuthUnauthenticated();
         return;
       }
-      final user = await _repository.getMe();
+
+      // 4. Tokens exist but no cache — try to fetch from server
+      final user = await _repo.getCurrentUser();
       state = AuthAuthenticated(user);
-    } catch (_) {
-      await _storage.clearAll();
+    } catch (e) {
+      debugPrint('[AuthNotifier] checkAuthStatus failed: $e');
       state = const AuthUnauthenticated();
     }
   }
 
-  /// Send OTP to phone number
+  /// Send OTP to the given phone number.
+  /// Returns the raw response map (contains cooldownSeconds, devOtp, etc.)
   Future<Map<String, dynamic>> sendOtp(String phone) async {
-    return _repository.sendOtp(phone);
-  }
-
-  /// Verify OTP and log in
-  Future<void> verifyOtp(String phone, String otp) async {
-    state = const AuthLoading();
     try {
-      final user = await _repository.verifyOtp(phone, otp);
-      state = AuthAuthenticated(user);
+      final result = await _repo.sendOtp(phone);
+      // Don't transition state — let the screen handle navigation
+      return result;
     } catch (e) {
-      state = AuthError(e.toString());
       rethrow;
     }
   }
 
-  /// Logout
+  /// Verify OTP and authenticate the user.
+  /// On success, transitions to AuthAuthenticated.
+  Future<void> verifyOtp(String phone, String otp) async {
+    try {
+      final result = await _repo.verifyOtp(phone, otp);
+
+      final accessToken = result['accessToken'] as String?;
+      final refreshToken = result['refreshToken'] as String?;
+      final userData = result['user'] as Map<String, dynamic>?;
+
+      if (accessToken == null || refreshToken == null || userData == null) {
+        throw Exception('Invalid response from server');
+      }
+
+      // Save tokens
+      await _storage.saveTokens(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      );
+
+      // Save user data for cache
+      await _storage.saveUserData(userData);
+
+      final user = AuthUser.fromJson(userData);
+      state = AuthAuthenticated(user);
+    } catch (e) {
+      state = AuthError(_humanizeError(e), phone: phone);
+      rethrow;
+    }
+  }
+
+  /// Logout: clear tokens and update state.
   Future<void> logout() async {
-    await _repository.logout();
+    try {
+      await _repo.logout();
+    } catch (e) {
+      debugPrint('[AuthNotifier] Logout API call failed: $e');
+    }
+    await _storage.clearAll();
     state = const AuthUnauthenticated();
+  }
+
+  /// Called by AuthInterceptor when tokens are irrecoverably expired.
+  /// Does NOT call the logout API (token is already invalid).
+  void forceLogout() {
+    state = const AuthUnauthenticated();
+  }
+
+  /// Refresh the user profile from the server.
+  Future<void> refreshProfile() async {
+    if (state is! AuthAuthenticated) return;
+    try {
+      final user = await _repo.getCurrentUser();
+      await _storage.saveUserData(user.toJson());
+      state = AuthAuthenticated(user);
+    } catch (e) {
+      debugPrint('[AuthNotifier] refreshProfile failed: $e');
+    }
+  }
+
+  /// Clear any error state, returning to unauthenticated.
+  void clearError() {
+    if (state is AuthError) {
+      state = const AuthUnauthenticated();
+    }
+  }
+
+  /// Non-blocking profile refresh for use after cached user load.
+  void _refreshProfileInBackground() {
+    Future.microtask(() async {
+      try {
+        final user = await _repo.getCurrentUser();
+        await _storage.saveUserData(user.toJson());
+        if (state is AuthAuthenticated) {
+          state = AuthAuthenticated(user);
+        }
+      } catch (e) {
+        debugPrint('[AuthNotifier] Background profile refresh failed: $e');
+        // Don't change state — cached user is still valid
+      }
+    });
+  }
+
+  String _humanizeError(Object e) {
+    final msg = e.toString().toLowerCase();
+    if (msg.contains('invalid') || msg.contains('incorrect')) {
+      return 'Incorrect OTP. Please try again.';
+    }
+    if (msg.contains('expired')) {
+      return 'OTP has expired. Please request a new one.';
+    }
+    if (msg.contains('attempt')) {
+      return 'Too many attempts. Please request a new OTP.';
+    }
+    if (msg.contains('network') || msg.contains('internet')) {
+      return 'No internet connection.';
+    }
+    return 'Verification failed. Please try again.';
   }
 }

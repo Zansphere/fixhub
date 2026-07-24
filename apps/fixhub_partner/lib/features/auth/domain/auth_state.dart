@@ -1,4 +1,8 @@
-/// Auth state models for the technician app
+/// Auth state models for the technician app.
+///
+/// Uses sealed classes for exhaustive pattern matching.
+/// AuthUser includes technician-specific fields (verification, rating, etc.)
+
 class AuthUser {
   final String id;
   final String phone;
@@ -42,10 +46,53 @@ class AuthUser {
     );
   }
 
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'phone': phone,
+    'name': name,
+    'email': email,
+    'role': role,
+    'profile': {
+      'profilePictureUrl': profilePictureUrl,
+      'isAvailable': isAvailable,
+      'verificationStatus': verificationStatus,
+      'rating': rating,
+      'totalJobs': totalJobs,
+    },
+  };
+
+  AuthUser copyWith({
+    String? id,
+    String? phone,
+    String? name,
+    String? email,
+    String? role,
+    String? profilePictureUrl,
+    bool? isAvailable,
+    String? verificationStatus,
+    double? rating,
+    int? totalJobs,
+  }) {
+    return AuthUser(
+      id: id ?? this.id,
+      phone: phone ?? this.phone,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      role: role ?? this.role,
+      profilePictureUrl: profilePictureUrl ?? this.profilePictureUrl,
+      isAvailable: isAvailable ?? this.isAvailable,
+      verificationStatus: verificationStatus ?? this.verificationStatus,
+      rating: rating ?? this.rating,
+      totalJobs: totalJobs ?? this.totalJobs,
+    );
+  }
+
   String get displayName => name ?? phone;
 
   bool get isVerified => verificationStatus == 'VERIFIED';
 }
+
+// ── Auth State Sealed Classes ─────────────────────────────────
 
 sealed class AuthState {
   const AuthState();
@@ -59,6 +106,19 @@ class AuthLoading extends AuthState {
   const AuthLoading();
 }
 
+/// OTP has been sent, waiting for user to enter it.
+class AuthOtpSent extends AuthState {
+  final String phone;
+  final String? devOtp;
+  const AuthOtpSent({required this.phone, this.devOtp});
+}
+
+/// OTP submitted, awaiting server verification.
+class AuthVerifying extends AuthState {
+  final String phone;
+  const AuthVerifying({required this.phone});
+}
+
 class AuthAuthenticated extends AuthState {
   final AuthUser user;
   const AuthAuthenticated(this.user);
@@ -70,5 +130,6 @@ class AuthUnauthenticated extends AuthState {
 
 class AuthError extends AuthState {
   final String message;
-  const AuthError(this.message);
+  final String? phone; // Preserve phone so user can retry
+  const AuthError(this.message, {this.phone});
 }

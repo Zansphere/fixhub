@@ -1,0 +1,766 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/config/theme/app_colors.dart';
+import '../../../core/config/theme/app_spacing.dart';
+import '../../../core/config/theme/app_radius.dart';
+import '../../../core/widgets/fp_button.dart';
+import '../../../core/widgets/fp_card.dart';
+import '../../../core/widgets/fp_skeleton.dart';
+import 'onboarding_provider.dart';
+
+class SetupWizardScreen extends ConsumerWidget {
+  const SetupWizardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(setupWizardProvider);
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ── Header + Step Indicator ─────────────────────────
+            _WizardHeader(currentStep: state.step),
+
+            // ── Step Body ───────────────────────────────────────
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                transitionBuilder: (child, anim) => FadeTransition(
+                  opacity: anim,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0.04, 0),
+                      end: Offset.zero,
+                    ).animate(anim),
+                    child: child,
+                  ),
+                ),
+                child: switch (state.step) {
+                  0 => const _Step1BasicInfo(key: ValueKey(0)),
+                  1 => const _Step2Specializations(key: ValueKey(1)),
+                  2 => const _Step3ServiceAreas(key: ValueKey(2)),
+                  _ => const SizedBox.shrink(),
+                },
+              ),
+            ),
+
+            // ── Bottom Navigation ────────────────────────────────
+            _WizardFooter(state: state),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Header
+// ─────────────────────────────────────────────────────────────────
+
+class _WizardHeader extends StatelessWidget {
+  final int currentStep;
+
+  const _WizardHeader({required this.currentStep});
+
+  static const _stepLabels = ['Basic Info', 'Services', 'Coverage'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenPadding,
+        AppSpacing.xl,
+        AppSpacing.screenPadding,
+        AppSpacing.base,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.build_circle_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Complete Your Profile',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  Text(
+                    'Step ${currentStep + 1} of 3 — ${_stepLabels[currentStep]}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.base),
+          // Progress bar
+          Row(
+            children: List.generate(3, (i) {
+              final done = i <= currentStep;
+              return Expanded(
+                child: Container(
+                  margin: EdgeInsets.only(right: i < 2 ? 6 : 0),
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: done ? AppColors.primary : AppColors.border,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Step 1 — Basic Info
+// ─────────────────────────────────────────────────────────────────
+
+class _Step1BasicInfo extends ConsumerStatefulWidget {
+  const _Step1BasicInfo({super.key});
+
+  @override
+  ConsumerState<_Step1BasicInfo> createState() => _Step1BasicInfoState();
+}
+
+class _Step1BasicInfoState extends ConsumerState<_Step1BasicInfo> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _emailCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final s = ref.read(setupWizardProvider);
+    _nameCtrl = TextEditingController(text: s.name ?? '');
+    _emailCtrl = TextEditingController(text: s.email ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.screenPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: AppSpacing.md),
+
+          // Avatar placeholder
+          Center(
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.primaryContainer,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.border, width: 2),
+              ),
+              child: const Icon(
+                Icons.person_outline_rounded,
+                size: 36,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: AppSpacing.xl),
+
+          Text(
+            'Tell us about yourself',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'This information will be shown to customers.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+          ),
+
+          const SizedBox(height: AppSpacing.xl),
+
+          _FieldLabel(label: 'Full Name *'),
+          const SizedBox(height: AppSpacing.sm),
+          TextFormField(
+            controller: _nameCtrl,
+            textCapitalization: TextCapitalization.words,
+            onChanged: (v) => ref.read(setupWizardProvider.notifier).setName(v),
+            decoration: const InputDecoration(
+              hintText: 'e.g. Ramesh Kumar',
+              prefixIcon: Icon(Icons.person_outline_rounded),
+            ),
+          ),
+
+          const SizedBox(height: AppSpacing.base),
+
+          _FieldLabel(label: 'Email Address (optional)'),
+          const SizedBox(height: AppSpacing.sm),
+          TextFormField(
+            controller: _emailCtrl,
+            keyboardType: TextInputType.emailAddress,
+            onChanged: (v) =>
+                ref.read(setupWizardProvider.notifier).setEmail(v),
+            decoration: const InputDecoration(
+              hintText: 'e.g. ramesh@example.com',
+              prefixIcon: Icon(Icons.email_outlined),
+            ),
+          ),
+
+          const SizedBox(height: AppSpacing.xl),
+
+          FpCard(
+            backgroundColor: AppColors.infoLight,
+            showBorder: false,
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 18,
+                  color: AppColors.info,
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Text(
+                    'Your profile will be reviewed by our team before you can start receiving jobs.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.info,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Step 2 — Specializations
+// ─────────────────────────────────────────────────────────────────
+
+class _Step2Specializations extends ConsumerWidget {
+  const _Step2Specializations({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(setupWizardProvider);
+    final categoriesAsync = ref.watch(catalogCategoriesProvider);
+    final servicesAsync = ref.watch(
+        catalogServicesProvider(state.selectedCategoryId));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screenPadding,
+            AppSpacing.base,
+            AppSpacing.screenPadding,
+            0,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'What services do you offer?',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Select a category then pick the specific services you can do.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+              ),
+              const SizedBox(height: AppSpacing.base),
+
+              // Category chips
+              categoriesAsync.when(
+                loading: () => const SizedBox(
+                  height: 40,
+                  child: Center(child: LinearProgressIndicator()),
+                ),
+                error: (_, __) => const Text('Could not load categories'),
+                data: (categories) => Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: categories
+                      .map((cat) => _CategoryChip(
+                            label: cat.name,
+                            isSelected:
+                                state.selectedCategoryId == cat.id,
+                            onTap: () => ref
+                                .read(setupWizardProvider.notifier)
+                                .setCategory(cat.id),
+                          ))
+                      .toList(),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.base),
+            ],
+          ),
+        ),
+
+        // Services list
+        Expanded(
+          child: state.selectedCategoryId == null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.touch_app_rounded,
+                        size: 48,
+                        color: AppColors.textDisabled,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Text(
+                        'Select a category above',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                      ),
+                    ],
+                  ),
+                )
+              : servicesAsync.when(
+                  loading: () => ListView.separated(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.screenPadding),
+                    itemCount: 6,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppSpacing.sm),
+                    itemBuilder: (_, __) => const FpSkeleton(height: 52),
+                  ),
+                  error: (_, __) => const Center(
+                    child: Text('Could not load services'),
+                  ),
+                  data: (services) {
+                    if (services.isEmpty) {
+                      return const Center(
+                        child: Text('No services in this category'),
+                      );
+                    }
+                    return ListView.separated(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.screenPadding),
+                      itemCount: services.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: AppSpacing.sm),
+                      itemBuilder: (context, i) {
+                        final svc = services[i];
+                        final isSelected = state.selectedSubServiceIds
+                            .contains(svc.id);
+                        return _ServiceTile(
+                          name: svc.name,
+                          isSelected: isSelected,
+                          onTap: () => ref
+                              .read(setupWizardProvider.notifier)
+                              .toggleSubService(svc.id),
+                        );
+                      },
+                    );
+                  },
+                ),
+        ),
+
+        // Selected count
+        if (state.selectedSubServiceIds.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.screenPadding,
+              vertical: AppSpacing.sm,
+            ),
+            color: AppColors.primaryContainer,
+            child: Text(
+              '${state.selectedSubServiceIds.length} service${state.selectedSubServiceIds.length == 1 ? '' : 's'} selected',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _CategoryChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _CategoryChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.base,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : AppColors.surface,
+          borderRadius: AppRadius.pill,
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.border,
+            width: 1.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ServiceTile extends StatelessWidget {
+  final String name;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ServiceTile({
+    required this.name,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.base,
+          vertical: AppSpacing.md,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primaryContainer : AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.border,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: isSelected ? AppColors.primary : Colors.transparent,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? AppColors.primary : AppColors.border,
+                  width: 1.5,
+                ),
+              ),
+              child: isSelected
+                  ? const Icon(Icons.check_rounded,
+                      size: 14, color: Colors.white)
+                  : null,
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Text(
+                name,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w400,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.textPrimary,
+                    ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Step 3 — Service Areas
+// ─────────────────────────────────────────────────────────────────
+
+/// For now we render a curated list of major Indian cities.
+/// When the backend's service-area CRUD API is available, fetch from there.
+class _Step3ServiceAreas extends ConsumerWidget {
+  const _Step3ServiceAreas({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(setupWizardProvider);
+    final areasAsync = ref.watch(catalogServiceAreasProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screenPadding,
+            AppSpacing.base,
+            AppSpacing.screenPadding,
+            AppSpacing.base,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Where do you work?',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Select all cities where you\'re available to take jobs.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+              ),
+            ],
+          ),
+        ),
+
+        Expanded(
+          child: areasAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (err, _) => const Center(
+              child: Text(
+                'Failed to load service areas',
+                style: TextStyle(color: AppColors.error),
+              ),
+            ),
+            data: (areas) {
+              if (areas.isEmpty) {
+                return const Center(child: Text('No service areas found'));
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenPadding),
+                itemCount: areas.length,
+                separatorBuilder: (_, __) =>
+                    const SizedBox(height: AppSpacing.sm),
+                itemBuilder: (context, i) {
+                  final area = areas[i];
+                  final isSelected = state.selectedAreaIds.contains(area.id);
+                  return _ServiceTile(
+                    name: area.state != null ? '${area.name} · ${area.state}' : area.name,
+                    isSelected: isSelected,
+                    onTap: () =>
+                        ref.read(setupWizardProvider.notifier).toggleArea(area.id),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+
+        if (state.selectedAreaIds.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.screenPadding,
+              vertical: AppSpacing.sm,
+            ),
+            color: AppColors.primaryContainer,
+            child: Text(
+              '${state.selectedAreaIds.length} area${state.selectedAreaIds.length == 1 ? '' : 's'} selected',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Footer navigation
+// ─────────────────────────────────────────────────────────────────
+
+class _WizardFooter extends ConsumerWidget {
+  final SetupWizardState state;
+
+  const _WizardFooter({required this.state});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isLastStep = state.step == 2;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenPadding,
+        AppSpacing.md,
+        AppSpacing.screenPadding,
+        AppSpacing.bottomSafePad,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Error message
+          if (state.error != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              margin: const EdgeInsets.only(bottom: AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.errorLight,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(
+                    color: AppColors.error.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                state.error!,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.error,
+                ),
+              ),
+            ),
+          ],
+
+          Row(
+            children: [
+              if (state.step > 0) ...[
+                Expanded(
+                  child: FpButton(
+                    label: 'Back',
+                    variant: FpButtonVariant.secondary,
+                    onPressed: () =>
+                        ref.read(setupWizardProvider.notifier).prevStep(),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+              ],
+              Expanded(
+                flex: 2,
+                child: FpButton(
+                  label: isLastStep ? 'Complete Setup' : 'Continue',
+                  isLoading: state.isSubmitting,
+                  trailing: isLastStep
+                      ? null
+                      : const Icon(Icons.arrow_forward_rounded,
+                          size: 18, color: Colors.white),
+                  onPressed: () async {
+                    final notifier =
+                        ref.read(setupWizardProvider.notifier);
+                    if (!notifier.validateCurrentStep()) return;
+                    if (isLastStep) {
+                      try {
+                        await notifier.submit();
+                        if (context.mounted) {
+                          context.go('/dashboard');
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                '🎉 Profile submitted! You\'ll be notified once verified.',
+                              ),
+                              duration: Duration(seconds: 4),
+                            ),
+                          );
+                        }
+                      } catch (_) {
+                        // Error displayed in state.error
+                      }
+                    } else {
+                      notifier.nextStep();
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+
+class _FieldLabel extends StatelessWidget {
+  final String label;
+
+  const _FieldLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+    );
+  }
+}

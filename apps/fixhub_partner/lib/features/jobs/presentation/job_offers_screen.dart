@@ -144,9 +144,13 @@ class _OfferCardState extends ConsumerState<_OfferCard> {
     super.initState();
     _remaining = widget.offer.timeRemaining;
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() => _remaining = widget.offer.timeRemaining);
+      if (!mounted) return;
+      final newRemaining = widget.offer.timeRemaining;
+      if (newRemaining == Duration.zero && _remaining != Duration.zero) {
+        // Just expired
+        ref.read(offersProvider.notifier).refresh();
       }
+      setState(() => _remaining = newRemaining);
     });
   }
 
@@ -209,30 +213,52 @@ class _OfferCardState extends ConsumerState<_OfferCard> {
 
   Future<String?> _showRejectDialog() {
     String reason = 'Not available at this time';
+    final customCtrl = TextEditingController();
     return showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-        ),
-        title: const Text('Decline Job Offer'),
-        content: DropdownButtonFormField<String>(
-          value: reason,
-          decoration: const InputDecoration(labelText: 'Reason'),
-          items: const [
-            DropdownMenuItem(value: 'Not available at this time', child: Text('Not available')),
-            DropdownMenuItem(value: 'Too far from my location', child: Text('Too far')),
-            DropdownMenuItem(value: 'Outside my expertise', child: Text('Outside expertise')),
-          ],
-          onChanged: (v) => reason = v ?? reason,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, reason),
-            child: const Text('Decline', style: TextStyle(color: AppColors.error)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
           ),
-        ],
+          title: const Text('Decline Job Offer'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: reason,
+                decoration: const InputDecoration(labelText: 'Reason'),
+                items: const [
+                  DropdownMenuItem(value: 'Not available at this time', child: Text('Not available')),
+                  DropdownMenuItem(value: 'Too far from my location', child: Text('Too far')),
+                  DropdownMenuItem(value: 'Outside my expertise', child: Text('Outside expertise')),
+                  DropdownMenuItem(value: 'Other', child: Text('Other')),
+                ],
+                onChanged: (v) {
+                  setDialogState(() => reason = v ?? reason);
+                },
+              ),
+              if (reason == 'Other') ...[
+                const SizedBox(height: AppSpacing.sm),
+                TextFormField(
+                  controller: customCtrl,
+                  decoration: const InputDecoration(hintText: 'Please specify...'),
+                  autofocus: true,
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () {
+                final finalReason = reason == 'Other' ? customCtrl.text.trim() : reason;
+                Navigator.pop(ctx, finalReason.isEmpty ? 'Other' : finalReason);
+              },
+              child: const Text('Decline', style: TextStyle(color: AppColors.error)),
+            ),
+          ],
+        ),
       ),
     );
   }

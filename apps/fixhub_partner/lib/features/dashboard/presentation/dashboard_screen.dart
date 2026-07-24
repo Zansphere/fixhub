@@ -54,7 +54,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final profileAsync = ref.watch(profileProvider);
-    final currentJobAsync = ref.watch(currentJobProvider);
+    final currentJobAsync = ref.watch(activeJobProvider);
     final todayEarningsAsync = ref.watch(todayEarningsProvider);
     final unreadCount = ref.watch(unreadCountProvider);
 
@@ -67,7 +67,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: RefreshIndicator(
           color: AppColors.primary,
           onRefresh: () async {
-            ref.invalidate(currentJobProvider);
+            ref.invalidate(activeJobProvider);
             ref.invalidate(todayEarningsProvider);
             ref.read(profileProvider.notifier).load();
           },
@@ -259,9 +259,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         const SizedBox(width: AppSpacing.md),
                         _QuickAction(
-                          icon: Icons.folder_outlined,
-                          label: 'Documents',
-                          onTap: () => context.push('/documents'),
+                          icon: Icons.person_outline_rounded,
+                          label: 'Profile',
+                          onTap: () => context.push('/profile'),
                         ),
                         const SizedBox(width: AppSpacing.md),
                         _QuickAction(
@@ -408,10 +408,25 @@ class _ActiveJobCard extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              TextButton.icon(
-                onPressed: () => context.push('/job-details/${job.id}'),
-                icon: const Text('View Details'),
-                label: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+              SizedBox(
+                height: 36,
+                child: FilledButton(
+                  onPressed: () => context.push('/job-details/${job.id}'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: AppRadius.button,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                  child: const Text(
+                    'Manage Job',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
