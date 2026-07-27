@@ -5,6 +5,7 @@ abstract class LocationRepository {
   Future<bool> checkPermission();
   Future<bool> requestPermission();
   Future<Position> getCurrentLocation();
-  Future<String?> getPincodeFromPosition(Position position);
-  Future<ServiceAreaValidationModel> validateServiceArea(String pincode);
+  Future<Map<String, String>?> getAddressFromPosition(Position position);
+  Future<ServiceAreaValidationModel> validateServiceArea(String pincode, {double? lat, double? lng});
+  Future<void> requestCoverage(String pincode, String name, String phone, String email);
 }

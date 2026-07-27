@@ -59,4 +59,5 @@ class ApiEndpoints {
   // ── Service Areas ───────────────────────────────────────────
   static const String serviceAreas = '/service-areas';
   static const String validateServiceArea = '/service-areas/validate';
+  static const String requestCoverage = '/service-areas/request-coverage';
 }

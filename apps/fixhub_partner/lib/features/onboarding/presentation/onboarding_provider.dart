@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/onboarding_repository.dart';
 import '../../profile/data/profile_repository.dart';
+import '../../../core/services/location_service.dart';
+import 'package:geocoding/geocoding.dart' as geo;
 
 // ── Catalog categories ────────────────────────────────────────────
 final catalogCategoriesProvider =
@@ -17,9 +19,25 @@ final catalogServicesProvider =
       .fetchServices(categoryId: categoryId);
 });
 
-// ── Service Areas ───────────────────────────────────────────────
-final catalogServiceAreasProvider = FutureProvider<List<ServiceArea>>((ref) async {
-  return ref.read(onboardingRepositoryProvider).fetchServiceAreas();
+// ── Location Auto-Detect ─────────────────────────────────────────
+final locationAutoDetectProvider = FutureProvider.autoDispose<Map<String, String>?>((ref) async {
+  final locService = ref.read(locationServiceProvider);
+  final position = await locService.getCurrentPosition();
+  if (position == null) return null;
+
+  try {
+    final placemarks = await geo.Geocoding().placemarkFromCoordinates(position.latitude, position.longitude);
+    if (placemarks.isNotEmpty) {
+      final p = placemarks.first;
+      if (p.postalCode != null && p.postalCode!.isNotEmpty) {
+        return {
+          'name': p.locality ?? p.subLocality ?? p.administrativeArea ?? 'Detected Location',
+          'pincode': p.postalCode!,
+        };
+      }
+    }
+  } catch (_) {}
+  return null;
 });
 
 // ── Setup wizard state ────────────────────────────────────────────
@@ -29,7 +47,7 @@ class SetupWizardState {
   final String? email;
   final String? selectedCategoryId;
   final List<String> selectedSubServiceIds;
-  final List<String> selectedAreaIds;
+  final List<Map<String, String>> customAreas;
   final bool isSubmitting;
   final String? error;
 
@@ -39,7 +57,7 @@ class SetupWizardState {
     this.email,
     this.selectedCategoryId,
     this.selectedSubServiceIds = const [],
-    this.selectedAreaIds = const [],
+    this.customAreas = const [],
     this.isSubmitting = false,
     this.error,
   });
@@ -50,7 +68,7 @@ class SetupWizardState {
     String? email,
     String? selectedCategoryId,
     List<String>? selectedSubServiceIds,
-    List<String>? selectedAreaIds,
+    List<Map<String, String>>? customAreas,
     bool? isSubmitting,
     String? error,
   }) {
@@ -61,7 +79,7 @@ class SetupWizardState {
       selectedCategoryId: selectedCategoryId ?? this.selectedCategoryId,
       selectedSubServiceIds:
           selectedSubServiceIds ?? this.selectedSubServiceIds,
-      selectedAreaIds: selectedAreaIds ?? this.selectedAreaIds,
+      customAreas: customAreas ?? this.customAreas,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       error: error,
     );
@@ -99,14 +117,18 @@ class SetupWizardNotifier extends Notifier<SetupWizardState> {
     state = state.copyWith(selectedSubServiceIds: current, error: null);
   }
 
-  void toggleArea(String id) {
-    final current = List<String>.from(state.selectedAreaIds);
-    if (current.contains(id)) {
-      current.remove(id);
-    } else {
-      current.add(id);
+  void addCustomArea(String name, String pincode) {
+    final current = List<Map<String, String>>.from(state.customAreas);
+    if (!current.any((a) => a['pincode'] == pincode)) {
+      current.add({'name': name, 'pincode': pincode});
     }
-    state = state.copyWith(selectedAreaIds: current, error: null);
+    state = state.copyWith(customAreas: current, error: null);
+  }
+
+  void removeCustomArea(String pincode) {
+    final current = List<Map<String, String>>.from(state.customAreas);
+    current.removeWhere((a) => a['pincode'] == pincode);
+    state = state.copyWith(customAreas: current, error: null);
   }
 
   void nextStep() {
@@ -133,9 +155,9 @@ class SetupWizardNotifier extends Notifier<SetupWizardState> {
         }
         return true;
       case 2:
-        if (state.selectedAreaIds.isEmpty) {
+        if (state.customAreas.isEmpty) {
           state = state.copyWith(
-              error: 'Please select at least one service area');
+              error: 'Please add at least one service area');
           return false;
         }
         return true;
@@ -162,8 +184,8 @@ class SetupWizardNotifier extends Notifier<SetupWizardState> {
       }
 
       // Step 3: Update service areas
-      if (state.selectedAreaIds.isNotEmpty) {
-        await repo.updateServiceAreas(state.selectedAreaIds);
+      if (state.customAreas.isNotEmpty) {
+        await repo.updateServiceAreas(customAreas: state.customAreas);
       }
 
       state = state.copyWith(isSubmitting: false);

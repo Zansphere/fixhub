@@ -1,5 +1,5 @@
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
+import 'package:geocoding/geocoding.dart' as geo;
 import '../../domain/repositories/location_repository.dart';
 import '../datasources/location_remote_datasource.dart';
 import '../models/service_area_validation_model.dart';
@@ -51,16 +51,23 @@ class LocationRepositoryImpl implements LocationRepository {
   }
 
   @override
-  Future<String?> getPincodeFromPosition(Position position) async {
+  Future<Map<String, String>?> getAddressFromPosition(Position position) async {
     try {
-      final placemarks = await Geocoding().placemarkFromCoordinates(
+      final placemarks = await geo.Geocoding().placemarkFromCoordinates(
         position.latitude,
         position.longitude,
       );
       if (placemarks.isNotEmpty) {
-        final pincode = placemarks.first.postalCode;
+        final p = placemarks.first;
+        final pincode = p.postalCode;
         if (pincode != null && pincode.isNotEmpty) {
-          return pincode;
+          final city = [p.subLocality, p.locality, p.administrativeArea]
+              .where((e) => e != null && e.isNotEmpty)
+              .join(', ');
+          return {
+            'pincode': pincode,
+            'city': city.isNotEmpty ? city : 'Unknown Location',
+          };
         }
       }
     } catch (e) {
@@ -70,8 +77,8 @@ class LocationRepositoryImpl implements LocationRepository {
   }
 
   @override
-  Future<ServiceAreaValidationModel> validateServiceArea(String pincode) async {
-    final response = await _remoteDataSource.validateServiceArea(pincode);
+  Future<ServiceAreaValidationModel> validateServiceArea(String pincode, {double? lat, double? lng}) async {
+    final response = await _remoteDataSource.validateServiceArea(pincode, lat: lat, lng: lng);
 
     print('Response: $response');
 
@@ -82,5 +89,15 @@ class LocationRepositoryImpl implements LocationRepository {
     return ServiceAreaValidationModel.fromJson(
       Map<String, dynamic>.from(data),
     );
+  }
+
+  @override
+  Future<void> requestCoverage(String pincode, String name, String phone, String email) async {
+    await _remoteDataSource.requestCoverage({
+      'pincode': pincode,
+      'name': name,
+      'phone': phone,
+      'email': email,
+    });
   }
 }

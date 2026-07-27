@@ -544,13 +544,38 @@ class _ServiceTile extends StatelessWidget {
 
 /// For now we render a curated list of major Indian cities.
 /// When the backend's service-area CRUD API is available, fetch from there.
-class _Step3ServiceAreas extends ConsumerWidget {
+class _Step3ServiceAreas extends ConsumerStatefulWidget {
   const _Step3ServiceAreas({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Step3ServiceAreas> createState() => _Step3ServiceAreasState();
+}
+
+class _Step3ServiceAreasState extends ConsumerState<_Step3ServiceAreas> {
+  final _nameController = TextEditingController();
+  final _pincodeController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _pincodeController.dispose();
+    super.dispose();
+  }
+
+  void _addArea() {
+    final name = _nameController.text.trim();
+    final pincode = _pincodeController.text.trim();
+    if (name.isNotEmpty && pincode.isNotEmpty) {
+      ref.read(setupWizardProvider.notifier).addCustomArea(name, pincode);
+      _nameController.clear();
+      _pincodeController.clear();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(setupWizardProvider);
-    final areasAsync = ref.watch(catalogServiceAreasProvider);
+    final autoDetectAsync = ref.watch(locationAutoDetectProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -573,7 +598,7 @@ class _Step3ServiceAreas extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Select all cities where you\'re available to take jobs.',
+                'We will auto-detect your location, and you can add more areas if needed.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: AppColors.textSecondary,
                     ),
@@ -582,57 +607,123 @@ class _Step3ServiceAreas extends ConsumerWidget {
           ),
         ),
 
-        Expanded(
-          child: areasAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, _) => const Center(
-              child: Text(
-                'Failed to load service areas',
-                style: TextStyle(color: AppColors.error),
-              ),
+        // Auto-detect section
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
+          child: autoDetectAsync.when(
+            loading: () => const Row(
+              children: [
+                SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                SizedBox(width: 12),
+                Text('Detecting your location...'),
+              ],
             ),
-            data: (areas) {
-              if (areas.isEmpty) {
-                return const Center(child: Text('No service areas found'));
-              }
-              return ListView.separated(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.screenPadding),
-                itemCount: areas.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(height: AppSpacing.sm),
-                itemBuilder: (context, i) {
-                  final area = areas[i];
-                  final isSelected = state.selectedAreaIds.contains(area.id);
-                  return _ServiceTile(
-                    name: area.state != null ? '${area.name} · ${area.state}' : area.name,
-                    isSelected: isSelected,
-                    onTap: () =>
-                        ref.read(setupWizardProvider.notifier).toggleArea(area.id),
-                  );
-                },
+            error: (err, _) => const Text('Could not detect location. Please add manually.', style: TextStyle(color: AppColors.error)),
+            data: (detected) {
+              if (detected == null) return const Text('Could not detect location. Please add manually.', style: TextStyle(color: AppColors.error));
+              
+              // Automatically add if not present
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!state.customAreas.any((a) => a['pincode'] == detected['pincode'])) {
+                  ref.read(setupWizardProvider.notifier).addCustomArea(detected['name']!, detected['pincode']!);
+                }
+              });
+
+              return Row(
+                children: [
+                  const Icon(Icons.my_location_rounded, color: AppColors.success, size: 20),
+                  const SizedBox(width: 8),
+                  Text('Detected: ${detected['name']} (${detected['pincode']})', 
+                    style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w600)),
+                ],
               );
             },
           ),
         ),
 
-        if (state.selectedAreaIds.isNotEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.screenPadding,
-              vertical: AppSpacing.sm,
-            ),
-            color: AppColors.primaryContainer,
-            child: Text(
-              '${state.selectedAreaIds.length} area${state.selectedAreaIds.length == 1 ? '' : 's'} selected',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primary,
+        const SizedBox(height: AppSpacing.lg),
+
+        // Custom Areas List
+        Expanded(
+          child: state.customAreas.isEmpty
+              ? const Center(child: Text('No areas added yet'))
+              : ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
+                  itemCount: state.customAreas.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+                  itemBuilder: (context, i) {
+                    final area = state.customAreas[i];
+                    return Container(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${area['name']} - ${area['pincode']}',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline, color: AppColors.error),
+                            onPressed: () => ref.read(setupWizardProvider.notifier).removeCustomArea(area['pincode']!),
+                          )
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+
+        // Add Manually Form
+        Padding(
+          padding: const EdgeInsets.all(AppSpacing.screenPadding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Add another area manually:', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(
+                        hintText: 'City Name',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    flex: 1,
+                    child: TextField(
+                      controller: _pincodeController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        hintText: 'Pincode',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  IconButton(
+                    style: IconButton.styleFrom(backgroundColor: AppColors.primaryContainer),
+                    icon: const Icon(Icons.add, color: AppColors.primary),
+                    onPressed: _addArea,
+                  ),
+                ],
               ),
-            ),
+            ],
           ),
+        ),
       ],
     );
   }

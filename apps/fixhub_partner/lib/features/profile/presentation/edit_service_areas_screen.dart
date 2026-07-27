@@ -6,7 +6,6 @@ import '../../../../core/config/theme/app_spacing.dart';
 import '../../../../core/config/theme/app_radius.dart';
 import '../../../../core/widgets/fp_app_bar.dart';
 import '../../../../core/widgets/fp_button.dart';
-import '../../../../core/widgets/fp_skeleton.dart';
 import '../../onboarding/presentation/onboarding_provider.dart';
 import '../data/profile_repository.dart';
 import 'profile_provider.dart';
@@ -21,9 +20,12 @@ class EditServiceAreasScreen extends ConsumerStatefulWidget {
 
 class _EditServiceAreasScreenState
     extends ConsumerState<EditServiceAreasScreen> {
-  List<String> _selectedAreaIds = [];
+  List<Map<String, String>> _customAreas = [];
   bool _isSaving = false;
   bool _isInitialized = false;
+
+  final _nameController = TextEditingController();
+  final _pincodeController = TextEditingController();
 
   @override
   void didChangeDependencies() {
@@ -34,32 +36,56 @@ class _EditServiceAreasScreenState
     }
   }
 
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _pincodeController.dispose();
+    super.dispose();
+  }
+
   void _initSelections() {
     final profileState = ref.read(profileProvider);
     final serviceAreas = profileState.value?.serviceAreas;
     if (serviceAreas != null) {
-      final ids = serviceAreas.map((a) {
+      final List<Map<String, String>> areas = [];
+      for (var a in serviceAreas) {
         if (a is Map<String, dynamic>) {
-          return a['id'] as String? ?? '';
+          if (a['pincode'] != null && a['name'] != null) {
+             areas.add({
+               'name': a['name'] as String,
+               'pincode': a['pincode'] as String,
+             });
+          }
         }
-        return '';
-      }).where((id) => id.isNotEmpty).toList();
-      _selectedAreaIds = List.from(ids);
+      }
+      setState(() {
+        _customAreas = areas;
+      });
     }
   }
 
-  void _toggleArea(String id) {
-    setState(() {
-      if (_selectedAreaIds.contains(id)) {
-        _selectedAreaIds.remove(id);
-      } else {
-        _selectedAreaIds.add(id);
+  void _addArea() {
+    final name = _nameController.text.trim();
+    final pincode = _pincodeController.text.trim();
+    if (name.isNotEmpty && pincode.isNotEmpty) {
+      if (!_customAreas.any((a) => a['pincode'] == pincode)) {
+        setState(() {
+          _customAreas.add({'name': name, 'pincode': pincode});
+        });
       }
+      _nameController.clear();
+      _pincodeController.clear();
+    }
+  }
+
+  void _removeArea(String pincode) {
+    setState(() {
+      _customAreas.removeWhere((a) => a['pincode'] == pincode);
     });
   }
 
   Future<void> _save() async {
-    if (_selectedAreaIds.isEmpty) {
+    if (_customAreas.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select at least one service area'),
@@ -73,7 +99,7 @@ class _EditServiceAreasScreenState
     try {
       await ref
           .read(profileRepositoryProvider)
-          .updateServiceAreas(_selectedAreaIds);
+          .updateServiceAreas(customAreas: _customAreas);
       ref.invalidate(profileProvider);
       if (mounted) {
         context.pop();
@@ -102,51 +128,128 @@ class _EditServiceAreasScreenState
 
   @override
   Widget build(BuildContext context) {
-    final areasAsync = ref.watch(catalogServiceAreasProvider);
+    final autoDetectAsync = ref.watch(locationAutoDetectProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const FpSurfaceAppBar(title: 'Edit Service Areas'),
       body: Column(
         children: [
-          Expanded(
-            child: areasAsync.when(
-              loading: () => ListView.separated(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.screenPadding,
-                    vertical: AppSpacing.lg),
-                itemCount: 8,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(height: AppSpacing.sm),
-                itemBuilder: (_, __) => const FpSkeleton(height: 52),
+          // Auto-detect section
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.screenPadding),
+            child: autoDetectAsync.when(
+              loading: () => const Row(
+                children: [
+                  SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(width: 12),
+                  Text('Detecting your location...'),
+                ],
               ),
-              error: (_, __) => const Center(
-                child: Text('Could not load service areas'),
-              ),
-              data: (areas) {
-                if (areas.isEmpty) {
-                  return const Center(
-                    child: Text('No service areas available'),
-                  );
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.screenPadding,
-                      vertical: AppSpacing.lg),
-                  itemCount: areas.length,
-                  separatorBuilder: (_, __) =>
-                      const SizedBox(height: AppSpacing.sm),
-                  itemBuilder: (context, i) {
-                    final area = areas[i];
-                    final isSelected = _selectedAreaIds.contains(area.id);
-                    return _AreaTile(
-                      name: area.name,
-                      isSelected: isSelected,
-                      onTap: () => _toggleArea(area.id),
-                    );
-                  },
+              error: (err, _) => const Text('Could not detect location. Please add manually.', style: TextStyle(color: AppColors.error)),
+              data: (detected) {
+                if (detected == null) return const Text('Could not detect location. Please add manually.', style: TextStyle(color: AppColors.error));
+                
+                // Automatically add if not present
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!_customAreas.any((a) => a['pincode'] == detected['pincode'])) {
+                    setState(() {
+                      _customAreas.add({'name': detected['name']!, 'pincode': detected['pincode']!});
+                    });
+                  }
+                });
+
+                return Row(
+                  children: [
+                    const Icon(Icons.my_location_rounded, color: AppColors.success, size: 20),
+                    const SizedBox(width: 8),
+                    Text('Detected: ${detected['name']} (${detected['pincode']})', 
+                      style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w600)),
+                  ],
                 );
               },
+            ),
+          ),
+
+          // Custom Areas List
+          Expanded(
+            child: _customAreas.isEmpty
+                ? const Center(child: Text('No areas added yet'))
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
+                    itemCount: _customAreas.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+                    itemBuilder: (context, i) {
+                      final area = _customAreas[i];
+                      return Container(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${area['name']} - ${area['pincode']}',
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle_outline, color: AppColors.error),
+                              onPressed: () => _removeArea(area['pincode']!),
+                            )
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+
+          // Add Manually Form
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.screenPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Add another area manually:', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _nameController,
+                        decoration: const InputDecoration(
+                          hintText: 'City Name',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      flex: 1,
+                      child: TextField(
+                        controller: _pincodeController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          hintText: 'Pincode',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    IconButton(
+                      style: IconButton.styleFrom(backgroundColor: AppColors.primaryContainer),
+                      icon: const Icon(Icons.add, color: AppColors.primary),
+                      onPressed: _addArea,
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
 
@@ -166,11 +269,11 @@ class _EditServiceAreasScreenState
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (_selectedAreaIds.isNotEmpty)
+                if (_customAreas.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.base),
                     child: Text(
-                      '${_selectedAreaIds.length} area${_selectedAreaIds.length == 1 ? '' : 's'} selected',
+                      '${_customAreas.length} area${_customAreas.length == 1 ? '' : 's'} added',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 13,
@@ -188,77 +291,6 @@ class _EditServiceAreasScreenState
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _AreaTile extends StatelessWidget {
-  final String name;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _AreaTile({
-    required this.name,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(
-            color: isSelected ? AppColors.info : AppColors.border,
-            width: 1.5,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppColors.info.withValues(alpha: 0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  )
-                ]
-              : null,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                name,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      fontWeight:
-                          isSelected ? FontWeight.w600 : FontWeight.w500,
-                      color: isSelected
-                          ? AppColors.info
-                          : AppColors.textPrimary,
-                    ),
-              ),
-            ),
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: isSelected ? AppColors.info : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? AppColors.info : AppColors.border,
-                  width: 2,
-                ),
-              ),
-              child: isSelected
-                  ? const Icon(Icons.check, size: 16, color: Colors.white)
-                  : null,
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -115,9 +115,9 @@ class LocationNotifier extends StateNotifier<LocationState> {
 
       final position = await _repository.getCurrentLocation();
 
-      final pincode = await _repository.getPincodeFromPosition(position);
+      final addressData = await _repository.getAddressFromPosition(position);
 
-      if (pincode == null) {
+      if (addressData == null || addressData['pincode'] == null) {
         state = state.copyWith(
           status: LocationStatus.error,
           errorMessage: 'Could not determine pincode from location.',
@@ -125,7 +125,10 @@ class LocationNotifier extends StateNotifier<LocationState> {
         return;
       }
 
-      await validateArea(pincode);
+      final pincode = addressData['pincode']!;
+      final city = addressData['city']!;
+
+      await validateArea(pincode, lat: position.latitude, lng: position.longitude, city: city);
     } catch (e, stack) {
       print('[LocationNotifier] detectFromGPS error: $e\n$stack');
       state = state.copyWith(
@@ -135,15 +138,16 @@ class LocationNotifier extends StateNotifier<LocationState> {
     }
   }
 
-  Future<void> validateArea(String pincode) async {
+  Future<void> validateArea(String pincode, {double? lat, double? lng, String? city}) async {
     state = state.copyWith(status: LocationStatus.checking);
     try {
-      final result = await _repository.validateServiceArea(pincode);
+      final result = await _repository.validateServiceArea(pincode, lat: lat, lng: lng);
 
       if (result.isServiceable) {
         state = state.copyWith(
           status: LocationStatus.valid,
           currentPincode: pincode,
+          currentCity: city,
           serviceAreaResult: result,
         );
         // Persist so we skip the screen next launch
@@ -152,6 +156,7 @@ class LocationNotifier extends StateNotifier<LocationState> {
         state = state.copyWith(
           status: LocationStatus.invalid,
           currentPincode: pincode,
+          currentCity: city,
           serviceAreaResult: result,
         );
         await _localStorage.saveLocation(pincode: pincode, status: 'invalid');
