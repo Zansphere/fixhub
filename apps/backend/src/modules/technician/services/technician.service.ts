@@ -6,6 +6,10 @@ import { TechnicianRepository } from '../repositories/technician.repository';
 import { TrackingGateway } from '../../tracking/tracking.gateway';
 import { PrismaService } from '../../../common/database/prisma.service';
 
+import { EventEmitter2 } from '@nestjs/event-emitter';
+
+import { TechnicianHeartbeatService } from './technician-heartbeat.service';
+
 @Injectable()
 export class TechnicianService {
   private readonly logger = new Logger(TechnicianService.name);
@@ -13,6 +17,8 @@ export class TechnicianService {
   constructor(
     private readonly technicianRepository: TechnicianRepository,
     private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly heartbeatService: TechnicianHeartbeatService,
     @Optional() private readonly trackingGateway: TrackingGateway,
   ) {}
 
@@ -31,13 +37,15 @@ export class TechnicianService {
     // Verify technician exists
     await this.resolveTechnicianId(userId);
 
-    return this.technicianRepository.updateProfile(userId, {
+    const result = await this.technicianRepository.updateProfile(userId, {
       name: dto.name,
       email: dto.email,
       profilePictureUrl: dto.profilePictureUrl,
       latitude: dto.latitude,
       longitude: dto.longitude,
     });
+    this.eventEmitter.emit('technician.updated', userId);
+    return result;
   }
 
   async updateAvailability(userId: string, dto: UpdateAvailabilityDto) {
@@ -57,17 +65,27 @@ export class TechnicianService {
       });
     }
 
-    return this.technicianRepository.updateAvailability(
+    const result = await this.technicianRepository.updateAvailability(
       userId,
       dto.isAvailable,
       dto.latitude,
       dto.longitude,
     );
+
+    if (dto.isAvailable) {
+      await this.heartbeatService.ping(technician.id);
+    }
+
+    this.eventEmitter.emit('technician.availability_changed', technician.id);
+    return result;
   }
 
   async updateLocation(userId: string, dto: UpdateLocationDto) {
-    await this.resolveTechnicianId(userId);
+    const technicianId = await this.resolveTechnicianId(userId);
     const updated = await this.technicianRepository.updateLocation(userId, dto.latitude, dto.longitude);
+
+    // Update heartbeat TTL
+    await this.heartbeatService.ping(technicianId);
 
     // Broadcast to any customer currently watching this technician's active booking
     if (this.trackingGateway) {

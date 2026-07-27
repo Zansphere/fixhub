@@ -1,7 +1,8 @@
 import { ErrorCodes } from '@fixhub/shared';
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 
 import { StorageService } from '../../../common/storage/storage.service';
+import { AdminNotificationService, AdminNotifType } from '../../admin/services/admin-notification.service';
 import { CreateDocumentDto } from '../dto';
 import { TechnicianDocumentRepository } from '../repositories/technician-document.repository';
 import { TechnicianService } from './technician.service';
@@ -12,6 +13,7 @@ export class TechnicianDocumentService {
     private readonly technicianService: TechnicianService,
     private readonly documentRepository: TechnicianDocumentRepository,
     private readonly storageService: StorageService,
+    @Optional() private readonly adminNotifService?: AdminNotificationService,
   ) {}
 
   async listDocuments(userId: string) {
@@ -41,11 +43,21 @@ export class TechnicianDocumentService {
       s3Key,
     });
 
-    return {
+    const result = {
       document,
       uploadUrl,
       s3Key,
     };
+
+    // Notify admin that a technician has submitted a document for verification
+    this.adminNotifService?.createAndBroadcast(
+      AdminNotifType.VERIFICATION_SUBMITTED,
+      '📄 Verification Document Submitted',
+      `A technician has uploaded a ${dto.documentType} document for verification.`,
+      { technicianId, documentType: dto.documentType, documentId: document.id },
+    ).catch(() => { /* silent */ });
+
+    return result;
   }
 
   async deleteDocument(userId: string, documentId: string) {

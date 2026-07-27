@@ -17,12 +17,13 @@
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["fullTextSearchPostgres"]
+  previewFeatures = ["fullTextSearchPostgres", "postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis()]
 }
 
 // ============================================================
@@ -138,8 +139,8 @@ enum CancellationActor {
 /// with role-specific profiles via 1:1 Customer/Technician.
 model User {
   id        String    @id @default(uuid()) @db.Uuid
-  phone     String    @unique
-  email     String?   @unique
+  phone     String
+  email     String?
   password  String?
   name      String?
   role      Role
@@ -267,6 +268,7 @@ model Address {
   pincode    String
   latitude   Decimal   @db.Decimal(10, 7)
   longitude  Decimal   @db.Decimal(10, 7)
+  location   Unsupported("geometry(Point, 4326)")?
   isDefault  Boolean   @default(false) @map("is_default")
   deletedAt  DateTime? @map("deleted_at")
   createdAt  DateTime  @default(now()) @map("created_at")
@@ -299,6 +301,7 @@ model Technician {
   // Live location — updated by mobile GPS
   latitude           Decimal?           @db.Decimal(10, 7)
   longitude          Decimal?           @db.Decimal(10, 7)
+  location           Unsupported("geometry(Point, 4326)")?
   lastLocationAt     DateTime?          @map("last_location_at")
   deletedAt          DateTime?          @map("deleted_at")
   createdAt          DateTime           @default(now()) @map("created_at")
@@ -384,6 +387,7 @@ model ServiceArea {
   pincode   String    @unique
   city      String
   state     String
+  boundary  Unsupported("geometry(Polygon, 4326)")?
   isActive  Boolean   @default(true) @map("is_active")
   deletedAt DateTime? @map("deleted_at")
   createdAt DateTime  @default(now()) @map("created_at")
@@ -483,6 +487,8 @@ model Booking {
   // Failure
   failedAt          DateTime?          @map("failed_at")
   failureReason     String?            @map("failure_reason")
+  // Admin archive (soft delete — background job purges after 90 days)
+  archivedAt        DateTime?          @map("archived_at")
   // Audit
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
@@ -683,12 +689,15 @@ model SubServiceArea {
   id            String @id @default(uuid()) @db.Uuid
   subServiceId  String @map("sub_service_id") @db.Uuid
   serviceAreaId String @map("service_area_id") @db.Uuid
+  
+  systemActive  Boolean @default(false) @map("system_active")
 
   subService  SubService  @relation(fields: [subServiceId], references: [id], onDelete: Cascade)
   serviceArea ServiceArea @relation(fields: [serviceAreaId], references: [id], onDelete: Cascade)
 
   @@unique([subServiceId, serviceAreaId])
   @@index([serviceAreaId])
+  @@index([systemActive])
   @@map("sub_service_areas")
 }
 
@@ -734,3 +743,134 @@ model PlatformSetting {
 
   @@map("platform_settings")
 }
+
+// ============================================================
+// ADMIN NOTIFICATIONS
+// ============================================================
+
+/// Platform-generated notifications targeting admin users.
+/// Stored in DB so the admin sees history on login.
+/// Real-time delivery is via AdminNotificationsGateway (Socket.IO).
+model AdminNotification {
+  id        String   @id @default(uuid()) @db.Uuid
+  /// e.g. TECHNICIAN_ASSIGNED | JOB_DECLINED | NEW_BOOKING | BOOKING_CANCELLED
+  ///      PAYMENT_CAPTURED | REFUND_PROCESSED | VERIFICATION_SUBMITTED
+  ///      TECHNICIAN_VERIFIED | TECHNICIAN_REJECTED | SERVICE_AREA_REQUEST
+  type      String
+  title     String
+  body      String
+  /// Free-form JSON for navigation (bookingId, technicianId, paymentId, etc.)
+  metadata  Json?
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([isRead])
+  @@index([createdAt(sort: Desc)])
+  @@map("admin_notifications")
+}
+
+/// Coverage requests submitted by customers whose pincode
+/// is not yet in an active service area ("Notify me when live").
+model ServiceAreaRequest {
+  id       String   @id @default(uuid()) @db.Uuid
+  pincode  String
+  name     String?
+  phone    String?
+  email    String?
+  /// PENDING | ACKNOWLEDGED
+  status   String   @default("PENDING")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([pincode])
+  @@index([status])
+  @@map("service_area_requests")
+}
+
+// ============================================================
+// PRICING & COUPONS
+// ============================================================
+
+/// Admin-managed pricing rules for categories.
+/// Defines base diagnostic/visiting fee, tax percentage, and cancellation fee.
+/// This is the single source of truth for pricing.
+model PricingRule {
+  id                  String   @id @default(uuid()) @db.Uuid
+  categoryId          String?  @unique @map("category_id") @db.Uuid // null = global default
+  label               String   // e.g. "Electrical Services" or "Global Default"
+  baseFee             Decimal  @default(0) @map("base_fee") @db.Decimal(10, 2)
+  taxPercent          Decimal  @default(18) @map("tax_percent") @db.Decimal(5, 2)
+  cancellationFeePercent Decimal @default(10) @map("cancellation_fee_percent") @db.Decimal(5, 2)
+  cancellationWindowMins Int    @default(60) @map("cancellation_window_mins")
+  isActive            Boolean  @default(true) @map("is_active")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  updatedBy           String?  @map("updated_by") @db.Uuid
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("pricing_rules")
+}
+
+enum CouponType {
+  PERCENTAGE
+  FLAT
+}
+
+/// Admin-managed discount coupons.
+/// firstBookingOnly = true means the system validates user has no prior bookings.
+model Coupon {
+  id             String     @id @default(uuid()) @db.Uuid
+  code           String     @unique
+  description    String?
+  type           CouponType
+  value          Decimal    @db.Decimal(10, 2) // 25 for 25%, or 100 for ₹100 off
+  maxDiscountAmount Decimal? @map("max_discount_amount") @db.Decimal(10, 2) // cap for percentage coupons
+  minOrderAmount Decimal?   @map("min_order_amount") @db.Decimal(10, 2)
+  firstBookingOnly Boolean  @default(false) @map("first_booking_only")
+  maxUses        Int?       @map("max_uses") // null = unlimited
+  usedCount      Int        @default(0) @map("used_count")
+  expiresAt      DateTime?  @map("expires_at")
+  isActive       Boolean    @default(true) @map("is_active")
+  categoryId     String?    @map("category_id") @db.Uuid // null = all categories
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  createdBy      String?    @map("created_by") @db.Uuid
+
+  @@index([code])
+  @@index([isActive, expiresAt])
+  @@map("coupons")
+}
+
+/// Cold storage for bookings older than 90 days.
+model ArchivedBooking {
+  id                String             @id @db.Uuid
+  bookingNumber     String             @unique @map("booking_number")
+  customerId        String             @map("customer_id") @db.Uuid
+  technicianId      String?            @map("technician_id") @db.Uuid
+  subServiceId      String             @map("sub_service_id") @db.Uuid
+  addressId         String             @map("address_id") @db.Uuid
+  status            BookingStatus
+  scheduledDate     DateTime           @map("scheduled_date") @db.Date
+  scheduledSlot     String             @map("scheduled_slot")
+  description       String?
+  totalAmount       Decimal            @map("total_amount") @db.Decimal(10, 2)
+  notes             String?
+  revisedAmount     Decimal?           @map("revised_amount") @db.Decimal(10, 2)
+  priceRevisionNote String?            @map("price_revision_note")
+  customerConsentAt DateTime?          @map("customer_consent_at")
+  completedAt       DateTime?          @map("completed_at")
+  cancelledAt       DateTime?          @map("cancelled_at")
+  cancelledBy       CancellationActor? @map("cancelled_by")
+  cancelReason      String?            @map("cancel_reason")
+  failedAt          DateTime?          @map("failed_at")
+  failureReason     String?            @map("failure_reason")
+  originalCreatedAt DateTime           @map("original_created_at")
+  originalUpdatedAt DateTime           @map("original_updated_at")
+  archivedAt        DateTime           @default(now()) @map("archived_at")
+  payload           Json
+
+  @@index([customerId])
+  @@index([bookingNumber])
+  @@map("archive_bookings")
+}
+

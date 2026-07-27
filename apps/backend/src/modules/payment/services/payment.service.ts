@@ -7,6 +7,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import {
@@ -21,6 +22,7 @@ import { Queue } from 'bullmq';
 
 import { QUEUE_NAMES } from '../../../common/queue/queue.constants';
 import { RedisService } from '../../../common/redis/redis.service';
+import { AdminNotificationService, AdminNotifType } from '../../admin/services/admin-notification.service';
 import { BookingDispatchService } from '../../booking/services/booking-dispatch.service';
 import { NotificationService } from '../../notification/services/notification.service';
 import {
@@ -47,6 +49,7 @@ export class PaymentService {
     private readonly notificationService: NotificationService,
     @InjectQueue(QUEUE_NAMES.PAYMENT_WEBHOOK)
     private readonly webhookQueue: Queue,
+    @Optional() private readonly adminNotifService?: AdminNotificationService,
   ) {}
 
   async createOrder(bookingId: string, userId: string, dto: CreatePaymentOrderDto = {}) {
@@ -354,6 +357,14 @@ export class PaymentService {
       await this.setIdempotentResult(idempotencyKey, result);
     }
 
+    // Notify admin of refund (fire-and-forget)
+    this.adminNotifService?.createAndBroadcast(
+      AdminNotifType.REFUND_PROCESSED,
+      '💰 Refund Processed',
+      `A refund of ₹${refundAmountInPaise / 100} has been processed for payment ${paymentId}.`,
+      { paymentId, refundId: refund.id, amount: refundAmountInPaise / 100 },
+    ).catch(() => { /* silent */ });
+
     return result;
   }
 
@@ -538,6 +549,14 @@ export class PaymentService {
     this.notifyPaymentEvent(params.bookingId, 'captured').catch((err) =>
       this.logger.warn(`Payment success notification error: ${err.message}`),
     );
+
+    // Notify admin of payment capture (fire-and-forget)
+    this.adminNotifService?.createAndBroadcast(
+      AdminNotifType.PAYMENT_CAPTURED,
+      '💳 Payment Captured',
+      `Payment captured for booking (Amount: ₹${params.amount}).`,
+      { bookingId: params.bookingId, paymentId, amount: params.amount },
+    ).catch(() => { /* silent */ });
 
     return updated;
   }

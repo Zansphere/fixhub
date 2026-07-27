@@ -8,9 +8,10 @@ import { Shield, ShieldCheck, ShieldX } from 'lucide-react';
 import { useTechnicians, useUpdateTechnicianStatus } from '@/lib/api/queries/use-technicians';
 import type { Technician, VerificationStatus } from '@/lib/types';
 import { formatDate, verificationStatusVariant } from '@/lib/utils';
-import { Avatar, Badge, Button, Select } from '@/components/ui';
+import { Avatar, Badge, Button, Select, Dialog } from '@/components/ui';
 import { DataTable, SortableHeader } from '@/components/data-table/data-table';
 import { toast } from 'sonner';
+import { useCreateTechnician } from '@/lib/api/queries/use-technicians';
 
 const VERIFICATION_OPTIONS = [
   { label: 'All Verification', value: '' },
@@ -25,6 +26,80 @@ const AVAILABILITY_OPTIONS = [
   { label: 'Available', value: 'true' },
   { label: 'Offline', value: 'false' },
 ];
+
+function CreateTechnicianDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [name, setName] = React.useState('');
+  const [phone, setPhone] = React.useState('');
+  const [email, setEmail] = React.useState('');
+  const createMutation = useCreateTechnician();
+
+  React.useEffect(() => {
+    if (open) {
+      setName('');
+      setPhone('');
+      setEmail('');
+    }
+  }, [open]);
+
+  const handleCreate = () => {
+    if (!name.trim() || !phone.trim()) {
+      return toast.error('Name and phone are required');
+    }
+    createMutation.mutate(
+      { name: name.trim(), phone: phone.trim(), email: email.trim() || undefined },
+      {
+        onSuccess: () => {
+          toast.success('Technician created successfully');
+          onClose();
+        },
+        onError: () => toast.error('Failed to create technician'),
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} title="Add New Technician">
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium text-[#374151] mb-1 block">Full Name</label>
+          <input
+            type="text"
+            className="w-full rounded-lg border border-[#E5E7EB] bg-[#F8F8F7] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#6F7F5F33]"
+            placeholder="John Doe"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#374151] mb-1 block">Phone Number</label>
+          <input
+            type="text"
+            className="w-full rounded-lg border border-[#E5E7EB] bg-[#F8F8F7] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#6F7F5F33]"
+            placeholder="+919876543210"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#374151] mb-1 block">Email (Optional)</label>
+          <input
+            type="email"
+            className="w-full rounded-lg border border-[#E5E7EB] bg-[#F8F8F7] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#6F7F5F33]"
+            placeholder="john@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={handleCreate} loading={createMutation.isPending} disabled={!name.trim() || !phone.trim()}>
+            Create Technician
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
 
 function VerificationBadge({ status }: { status: VerificationStatus }) {
   const icons: Record<VerificationStatus, React.ReactNode> = {
@@ -62,6 +137,7 @@ export default function TechniciansPage() {
   const [limit] = React.useState(20);
   const [verificationFilter, setVerificationFilter] = React.useState('');
   const [availabilityFilter, setAvailabilityFilter] = React.useState('');
+  const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
 
   const { data, isLoading } = useTechnicians({
     page,
@@ -195,11 +271,16 @@ export default function TechniciansPage() {
 
   return (
     <div className="space-y-4 fade-in">
-      <div>
-        <h1 className="text-xl font-bold text-[#111827]">Technicians</h1>
-        <p className="mt-0.5 text-sm text-[#6B7280]">
-          {data?.meta?.total ? `${data.meta.total} technicians on platform` : 'Loading...'}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-[#111827]">Technicians</h1>
+          <p className="mt-0.5 text-sm text-[#6B7280]">
+            {data?.meta?.total ? `${data.meta.total} technicians on platform` : 'Loading...'}
+          </p>
+        </div>
+        <Button variant="primary" onClick={() => setCreateDialogOpen(true)}>
+          New Technician
+        </Button>
       </div>
 
       <DataTable
@@ -233,6 +314,11 @@ export default function TechniciansPage() {
             />
           </>
         }
+      />
+
+      <CreateTechnicianDialog 
+        open={createDialogOpen} 
+        onClose={() => setCreateDialogOpen(false)} 
       />
     </div>
   );

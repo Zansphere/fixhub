@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 
 import { useServices, useCreateService, useUpdateService, useDeleteService, useService } from '@/lib/api/queries/use-services';
 import { useCategories } from '@/lib/api/queries/use-categories';
+import { useServiceAreas } from '@/lib/api/queries/use-service-areas';
 import type { SubService } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
 import { Badge, Button, Dialog, Input, Select, Skeleton } from '@/components/ui';
@@ -39,21 +40,36 @@ function ServiceDialog({
     defaultValues: { name: '', categoryId: '', description: '', basePrice: 0, estimatedDurationMins: 60, isActive: true },
   });
 
+  const { data: areasData } = useServiceAreas({ limit: 100 });
+  const areas = areasData?.items ?? [];
+
+  const [serviceAreaIds, setServiceAreaIds] = React.useState<string[]>([]);
+
   React.useEffect(() => {
-    if (open) reset(
-      editService
-        ? { name: editService.name, categoryId: editService.categoryId, description: editService.description ?? '', basePrice: Number(editService.basePrice), estimatedDurationMins: editService.estimatedDurationMins, isActive: editService.isActive }
-        : { name: '', categoryId: '', description: '', basePrice: 0, estimatedDurationMins: 60, isActive: true },
-    );
+    if (open) {
+      reset(
+        editService
+          ? { name: editService.name, categoryId: editService.categoryId, description: editService.description ?? '', basePrice: Number(editService.basePrice), estimatedDurationMins: editService.estimatedDurationMins, isActive: editService.isActive }
+          : { name: '', categoryId: '', description: '', basePrice: 0, estimatedDurationMins: 60, isActive: true },
+      );
+      setServiceAreaIds(editService?.activeAreas?.map((a: any) => a.serviceAreaId) ?? []);
+    }
   }, [open, editService, reset]);
 
+  const toggleArea = (id: string) => {
+    setServiceAreaIds(prev => 
+      prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]
+    );
+  };
+
   const onSubmit = (values: ServiceForm) => {
+    const payload = { ...values, serviceAreaIds };
     if (editServiceId) {
-      updateMutation.mutate({ id: editServiceId, ...values }, {
+      updateMutation.mutate({ id: editServiceId, ...payload }, {
         onSuccess: () => { toast.success('Service updated'); onClose(); },
       });
     } else {
-      createMutation.mutate(values, {
+      createMutation.mutate(payload, {
         onSuccess: () => { toast.success('Service created'); onClose(); },
       });
     }
@@ -71,6 +87,40 @@ function ServiceDialog({
           <Input label="Base Price (₹)" type="number" error={errors.basePrice?.message} {...register('basePrice')} />
           <Input label="Duration (mins)" type="number" error={errors.estimatedDurationMins?.message} {...register('estimatedDurationMins')} />
         </div>
+        
+        <div>
+          <label className="text-sm font-medium text-[#374151] mb-2 block">Available In (Service Areas)</label>
+          <div className="max-h-40 overflow-y-auto border border-[#E5E7EB] rounded-lg p-2 space-y-2 bg-[#F8F8F7]">
+            {areas.length === 0 ? (
+              <p className="text-xs text-[#6B7280] p-2">No service areas found. (Will be available everywhere by default)</p>
+            ) : (
+              areas.map(area => {
+                const checked = serviceAreaIds.includes(area.id);
+                const activeArea = editService?.activeAreas?.find((a: any) => a.serviceAreaId === area.id);
+                const isSystemActive = activeArea?.systemActive ?? false;
+
+                return (
+                  <label key={area.id} className="flex items-center gap-2 text-sm text-[#374151] cursor-pointer hover:bg-white p-1 rounded">
+                    <input 
+                      type="checkbox" 
+                      checked={checked}
+                      onChange={() => toggleArea(area.id)}
+                      className="rounded text-[#111827] focus:ring-[#111827]"
+                    />
+                    <span className="flex-1">{area.name} <span className="text-xs text-[#6B7280]">({area.pincode})</span></span>
+                    {checked && (
+                      isSystemActive 
+                        ? <Badge variant="success">Active</Badge> 
+                        : <Badge variant="warning">Awaiting Techs</Badge>
+                    )}
+                  </label>
+                );
+              })
+            )}
+          </div>
+          <p className="text-[10px] text-[#6B7280] mt-1">If none selected, service will be available in all active areas.</p>
+        </div>
+
         <div className="flex items-center gap-2">
           <input type="checkbox" id="svcActive" {...register('isActive')} className="rounded" />
           <label htmlFor="svcActive" className="text-sm font-medium text-[#374151]">Active</label>

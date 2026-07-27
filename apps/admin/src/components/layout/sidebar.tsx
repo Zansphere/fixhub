@@ -60,9 +60,11 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    title: 'Finance',
+    title: 'Finance & Pricing',
     items: [
       { label: 'Payments', href: '/payments', icon: CreditCard },
+      { label: 'Pricing Rules', href: '/pricing', icon: FileText },
+      { label: 'Coupons', href: '/coupons', icon: Tag },
       { label: 'Reports', href: '/reports', icon: BarChart2 },
     ],
   },

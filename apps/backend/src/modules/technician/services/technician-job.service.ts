@@ -1,8 +1,9 @@
 import { ErrorCodes } from '@fixhub/shared';
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { BookingStatus } from '@prisma/client';
 
 import { AuthenticatedUser } from '../../../common/interfaces/auth.interface';
+import { AdminNotificationService, AdminNotifType } from '../../admin/services/admin-notification.service';
 import { BookingLifecycleService } from '../../booking/services/booking-lifecycle.service';
 import { JobQueryDto, RejectJobDto, UpdateJobStatusDto } from '../dto';
 import { TechnicianJobRepository } from '../repositories/technician-job.repository';
@@ -24,6 +25,7 @@ export class TechnicianJobService {
     private readonly technicianService: TechnicianService,
     private readonly jobRepository: TechnicianJobRepository,
     private readonly bookingLifecycleService: BookingLifecycleService,
+    @Optional() private readonly adminNotifService?: AdminNotificationService,
   ) {}
 
   async listJobs(userId: string, query: JobQueryDto) {
@@ -92,10 +94,20 @@ export class TechnicianJobService {
 
     // Transition back to CONFIRMED — returns to assignment pool.
     // The state machine now legitimately allows TECHNICIAN on ASSIGNED→CONFIRMED.
-    return this.bookingLifecycleService.transition(bookingId, user, {
+    const result = await this.bookingLifecycleService.transition(bookingId, user, {
       status: BookingStatus.CONFIRMED,
       note: `Technician rejected: ${dto.reason}`,
     });
+
+    // Notify admin of job decline (fire-and-forget)
+    this.adminNotifService?.createAndBroadcast(
+      AdminNotifType.JOB_DECLINED,
+      '❌ Job Declined by Technician',
+      `Booking #${result.booking.bookingNumber} was declined. Reason: ${dto.reason}`,
+      { bookingId, bookingNumber: result.booking.bookingNumber, reason: dto.reason },
+    ).catch(() => { /* silent */ });
+
+    return result;
   }
 
   async updateJobStatus(user: AuthenticatedUser, bookingId: string, dto: UpdateJobStatusDto) {

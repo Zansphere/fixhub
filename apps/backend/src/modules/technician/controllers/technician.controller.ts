@@ -28,6 +28,7 @@ import { TechnicianReviewService } from '../services/technician-review.service';
 import { TechnicianServiceAreaService } from '../services/technician-service-area.service';
 import { TechnicianSpecializationService } from '../services/technician-specialization.service';
 import { TechnicianService } from '../services/technician.service';
+import { TechnicianHeartbeatService } from '../services/technician-heartbeat.service';
 import { JobOfferService } from '../services/job-offer.service';
 
 
@@ -46,6 +47,7 @@ export class TechnicianController {
     private readonly earningsService: TechnicianEarningsService,
     private readonly offerService: JobOfferService,
     private readonly bookingService: BookingService,
+    private readonly heartbeatService: TechnicianHeartbeatService,
   ) {}
 
   // ── Profile ──────────────────────────────────────────────
@@ -81,6 +83,13 @@ export class TechnicianController {
     @Body() dto: UpdateLocationDto,
   ) {
     return this.technicianService.updateLocation(user.userId, dto);
+  }
+
+  @Post('heartbeat')
+  @ApiOperation({ summary: 'Ping the heartbeat to stay available' })
+  async pingHeartbeat(@CurrentUser() user: AuthenticatedUser) {
+    await this.heartbeatService.ping(user.userId);
+    return { success: true };
   }
 
   // ── Documents ────────────────────────────────────────────

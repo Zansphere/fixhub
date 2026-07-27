@@ -69,6 +69,14 @@ export class TechnicianRepository {
         });
       }
 
+      if (data.latitude !== undefined && data.longitude !== undefined) {
+        await tx.$executeRaw`
+          UPDATE technicians
+          SET location = ST_SetSRID(ST_MakePoint(${data.longitude}::float, ${data.latitude}::float), 4326)
+          WHERE user_id = ${userId}::uuid
+        `;
+      }
+
       // Return full profile
       return tx.technician.findUnique({
         where: { userId },
@@ -89,7 +97,7 @@ export class TechnicianRepository {
   }
 
   async updateAvailability(userId: string, isAvailable: boolean, latitude?: number, longitude?: number) {
-    return this.prisma.technician.update({
+    const technician = await this.prisma.technician.update({
       where: { userId },
       data: {
         isAvailable,
@@ -101,10 +109,20 @@ export class TechnicianRepository {
         user: { select: { id: true, phone: true, name: true, email: true, role: true } },
       },
     });
+
+    if (latitude !== undefined && longitude !== undefined) {
+      await this.prisma.$executeRaw`
+        UPDATE technicians
+        SET location = ST_SetSRID(ST_MakePoint(${longitude}::float, ${latitude}::float), 4326)
+        WHERE user_id = ${userId}::uuid
+      `;
+    }
+
+    return technician;
   }
 
   async updateLocation(userId: string, latitude: number, longitude: number) {
-    return this.prisma.technician.update({
+    const technician = await this.prisma.technician.update({
       where: { userId },
       data: {
         latitude,
@@ -118,5 +136,36 @@ export class TechnicianRepository {
         lastLocationAt: true,
       },
     });
+
+    // Update PostGIS location field
+    await this.prisma.$executeRaw`
+      UPDATE technicians
+      SET location = ST_SetSRID(ST_MakePoint(${longitude}::float, ${latitude}::float), 4326)
+      WHERE user_id = ${userId}::uuid
+    `;
+
+    return technician;
+  }
+
+  async findNearbyTechnicians(latitude: number, longitude: number, radiusInMeters: number = 5000) {
+    // PostGIS raw SQL for radius search (distance in meters)
+    const technicians = await this.prisma.$queryRaw<any[]>`
+      SELECT 
+        t.id, 
+        t.user_id as "userId",
+        t.latitude, 
+        t.longitude,
+        t.is_available as "isAvailable",
+        ST_DistanceSphere(t.location, ST_MakePoint(${longitude}::float, ${latitude}::float)) as distance
+      FROM technicians t
+      INNER JOIN users u ON t.user_id = u.id
+      WHERE t.deleted_at IS NULL
+        AND u.is_active = true
+        AND t.verification_status = 'VERIFIED'
+        AND ST_DWithin(t.location, ST_MakePoint(${longitude}::float, ${latitude}::float), ${radiusInMeters})
+      ORDER BY distance ASC
+      LIMIT 50
+    `;
+    return technicians;
   }
 }

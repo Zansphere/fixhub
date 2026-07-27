@@ -64,19 +64,27 @@ export class JobOfferRepository {
   /** Accept this offer; expire all other PENDING offers for the same booking. */
   async acceptOffer(offerId: string, technicianId: string) {
     return this.prisma.$transaction(async (tx) => {
-      const offer = await tx.jobOffer.findUniqueOrThrow({
+      const offer = await tx.jobOffer.findUnique({
         where: { id: offerId },
         include: { booking: true },
       });
 
-      // Mark winner
-      await tx.jobOffer.update({
-        where: { id: offerId },
+      if (!offer || offer.status !== JobOfferStatus.PENDING) {
+        throw new Error('Offer is no longer available'); // Handled by service layer
+      }
+
+      // Mark winner with optimistic locking
+      const { count } = await tx.jobOffer.updateMany({
+        where: { id: offerId, status: JobOfferStatus.PENDING },
         data: {
           status: JobOfferStatus.ACCEPTED,
           respondedAt: new Date(),
         },
       });
+
+      if (count === 0) {
+        throw new Error('Offer was accepted by someone else or expired');
+      }
 
       // Expire all other pending offers for this booking
       await tx.jobOffer.updateMany({

@@ -66,6 +66,11 @@ export class CreateServiceDto {
   @Min(0)
   @Max(10000)
   sortOrder?: number;
+
+  @ApiPropertyOptional({ example: ['area-uuid-1', 'area-uuid-2'] })
+  @IsOptional()
+  @IsString({ each: true })
+  serviceAreaIds?: string[];
 }
 
 export class UpdateServiceDto {
@@ -126,4 +131,9 @@ export class UpdateServiceDto {
   @Min(0)
   @Max(10000)
   sortOrder?: number;
+
+  @ApiPropertyOptional({ example: ['area-uuid-1', 'area-uuid-2'] })
+  @IsOptional()
+  @IsString({ each: true })
+  serviceAreaIds?: string[];
 }

@@ -124,10 +124,14 @@ class ProfileRepository {
   }
 
   /// PUT /technicians/service-areas — syncs service areas
-  Future<void> updateServiceAreas(List<String> areaIds) async {
+  Future<void> updateServiceAreas({List<String>? areaIds, List<Map<String, String>>? customAreas}) async {
+    final data = <String, dynamic>{};
+    if (areaIds != null && areaIds.isNotEmpty) data['serviceAreaIds'] = areaIds;
+    if (customAreas != null && customAreas.isNotEmpty) data['customAreas'] = customAreas;
+    
     await _dio.put(
       ApiEndpoints.technicianServiceAreas,
-      data: {'serviceAreaIds': areaIds},
+      data: data,
     );
   }
 

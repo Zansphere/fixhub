@@ -16,6 +16,28 @@ export class CatalogRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async listCategories(query: CategoryQueryDto, publicOnly = true) {
+    let validCategoryIds: string[] | undefined = undefined;
+
+    if (query.latitude && query.longitude) {
+      const radius = query.radius ?? 5000;
+      const rawCategories = await this.prisma.$queryRaw<any[]>`
+        SELECT DISTINCT c.id
+        FROM categories c
+        INNER JOIN sub_services ss ON c.id = ss.category_id
+        LEFT JOIN technician_specializations ts ON ss.id = ts.sub_service_id
+        LEFT JOIN technicians t ON ts.technician_id = t.id
+        LEFT JOIN users u ON t.user_id = u.id
+        WHERE c.deleted_at IS NULL
+          AND ss.deleted_at IS NULL
+          AND (
+            (t.deleted_at IS NULL AND u.is_active = true AND t.verification_status = 'VERIFIED' AND ST_DWithin(t.location, ST_MakePoint(${query.longitude}::float, ${query.latitude}::float), ${radius}))
+            OR
+            NOT EXISTS (SELECT 1 FROM sub_service_areas ssa WHERE ssa.sub_service_id = ss.id)
+          )
+      `;
+      validCategoryIds = rawCategories.map(r => r.id);
+    }
+
     const where: Prisma.CategoryWhereInput = {
       deletedAt: null,
       ...(publicOnly ? { isActive: true } : {}),
@@ -26,6 +48,26 @@ export class CatalogRepository {
           { slug: { contains: query.search, mode: 'insensitive' } },
         ],
       }),
+      ...(validCategoryIds ? { id: { in: validCategoryIds } } : {}),
+      ...(query.pincode && !validCategoryIds ? {
+        subServices: {
+          some: {
+            deletedAt: null,
+            ...(publicOnly ? { isActive: true } : {}),
+            OR: [
+              { activeAreas: { none: {} } },
+              {
+                activeAreas: {
+                  some: {
+                    serviceArea: { pincode: query.pincode, isActive: true },
+                    ...(publicOnly ? { systemActive: true } : {})
+                  }
+                }
+              }
+            ]
+          }
+        }
+      } : {}),
     };
 
     const sortBy = this.categorySortField(query.sortBy);
@@ -148,13 +190,45 @@ export class CatalogRepository {
       ];
     }
 
-    if (query.pincode) {
+    let validSubServiceIds: string[] | undefined = undefined;
+
+    if (query.latitude && query.longitude) {
+      const radius = query.radius ?? 5000;
+      const rawSubServices = await this.prisma.$queryRaw<any[]>`
+        SELECT DISTINCT ss.id
+        FROM sub_services ss
+        LEFT JOIN technician_specializations ts ON ss.id = ts.sub_service_id
+        LEFT JOIN technicians t ON ts.technician_id = t.id
+        LEFT JOIN users u ON t.user_id = u.id
+        WHERE ss.deleted_at IS NULL
+          AND (
+            (t.deleted_at IS NULL AND u.is_active = true AND t.verification_status = 'VERIFIED' AND ST_DWithin(t.location, ST_MakePoint(${query.longitude}::float, ${query.latitude}::float), ${radius}))
+            OR
+            NOT EXISTS (SELECT 1 FROM sub_service_areas ssa WHERE ssa.sub_service_id = ss.id)
+          )
+      `;
+      validSubServiceIds = rawSubServices.map(r => r.id);
+    }
+
+    if (validSubServiceIds) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : (where.AND ? [where.AND as Prisma.SubServiceWhereInput] : [])),
+        { id: { in: validSubServiceIds } },
+      ];
+    } else if (query.pincode) {
       where.AND = [
         ...(Array.isArray(where.AND) ? where.AND : (where.AND ? [where.AND as Prisma.SubServiceWhereInput] : [])),
         {
           OR: [
             { activeAreas: { none: {} } },
-            { activeAreas: { some: { serviceArea: { pincode: query.pincode, isActive: true } } } },
+            { 
+              activeAreas: { 
+                some: { 
+                  serviceArea: { pincode: query.pincode, isActive: true },
+                  ...(publicOnly ? { systemActive: true } : {})
+                } 
+              } 
+            },
           ],
         },
       ];
@@ -182,7 +256,7 @@ export class CatalogRepository {
         deletedAt: null,
         ...(publicOnly ? { isActive: true, category: { isActive: true, deletedAt: null } } : {}),
       },
-      include: { category: true },
+      include: { category: true, activeAreas: { include: { serviceArea: true } } },
     });
   }
 
@@ -206,8 +280,13 @@ export class CatalogRepository {
         sortOrder: dto.sortOrder ?? 0,
         createdBy: actorUserId,
         updatedBy: actorUserId,
+        ...(dto.serviceAreaIds && dto.serviceAreaIds.length > 0 ? {
+          activeAreas: {
+            create: dto.serviceAreaIds.map((id) => ({ serviceAreaId: id })),
+          },
+        } : {}),
       },
-      include: { category: true },
+      include: { category: true, activeAreas: true },
     });
   }
 
@@ -227,8 +306,14 @@ export class CatalogRepository {
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
         ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
         updatedBy: actorUserId,
+        ...(dto.serviceAreaIds !== undefined ? {
+          activeAreas: {
+            deleteMany: {},
+            create: dto.serviceAreaIds.map((areaId) => ({ serviceAreaId: areaId })),
+          },
+        } : {}),
       },
-      include: { category: true },
+      include: { category: true, activeAreas: true },
     });
   }
 

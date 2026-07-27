@@ -73,3 +73,39 @@ export function useCancelBooking() {
     },
   });
 }
+
+export function useCreateBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      customerId: string;
+      subServiceId: string;
+      addressId: string;
+      technicianId?: string;
+      scheduledDate: string;
+      scheduledSlot: string;
+      description?: string;
+      totalAmount: number;
+    }) => {
+      const { data } = await apiClient.post(endpoints.bookings.create, payload);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+    },
+  });
+}
+
+export function useDeleteBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ bookingId, reason }: { bookingId: string; reason: string }) => {
+      const { data } = await apiClient.delete(endpoints.bookings.delete(bookingId), { data: { reason } });
+      return data;
+    },
+    onSuccess: (_, { bookingId }) => {
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['booking', bookingId] });
+    },
+  });
+}

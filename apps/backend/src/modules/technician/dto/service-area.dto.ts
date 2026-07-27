@@ -1,10 +1,28 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { ArrayMinSize, IsArray, IsUUID } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ArrayMinSize, IsArray, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class CustomServiceAreaDto {
+  @ApiProperty({ example: 'Kolathur' })
+  @IsString()
+  name!: string;
+
+  @ApiProperty({ example: '600099' })
+  @IsString()
+  pincode!: string;
+}
 
 export class UpdateServiceAreasDto {
-  @ApiProperty({ type: [String], example: ['service-area-uuid-1', 'service-area-uuid-2'] })
+  @ApiPropertyOptional({ type: [String], example: ['service-area-uuid-1'] })
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @IsUUID('4', { each: true })
-  serviceAreaIds!: string[];
+  serviceAreaIds?: string[];
+
+  @ApiPropertyOptional({ type: [CustomServiceAreaDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CustomServiceAreaDto)
+  customAreas?: CustomServiceAreaDto[];
 }

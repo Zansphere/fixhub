@@ -56,3 +56,29 @@ export function useDeleteServiceArea() {
     },
   });
 }
+
+export function useCoverageRequests(params?: { page?: number; limit?: number }) {
+  return useQuery({
+    queryKey: ['service-areas', 'coverage-requests', params],
+    queryFn: async () => {
+      const { data } = await apiClient.get<PaginatedResponse<any>>(
+        endpoints.serviceAreas.coverageRequests,
+        { params },
+      );
+      return data.data;
+    },
+  });
+}
+
+export function useMarkCoverageHandled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await apiClient.patch(endpoints.serviceAreas.markCoverageHandled(id));
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['service-areas', 'coverage-requests'] });
+    },
+  });
+}

@@ -43,3 +43,39 @@ export function useUpdateCustomerStatus() {
     },
   });
 }
+
+export function useCreateCustomer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { name: string; phone: string; email?: string }) => {
+      const { data } = await apiClient.post(endpoints.admin.customers, payload);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers'] });
+    },
+  });
+}
+
+export function useUpdateCustomerDetails() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: { name?: string; email?: string } }) => {
+      const { data } = await apiClient.patch(endpoints.admin.customerDetails(id), payload);
+      return data;
+    },
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      qc.invalidateQueries({ queryKey: ['customer', id] });
+    },
+  });
+}
+
+export function useNotifyCustomerProfile() {
+  return useMutation({
+    mutationFn: async ({ id, message }: { id: string; message: string }) => {
+      const { data } = await apiClient.post(endpoints.admin.customerNotifyProfile(id), { message });
+      return data;
+    },
+  });
+}

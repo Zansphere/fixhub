@@ -286,6 +286,345 @@ export class AdminRepository {
     return this.paginate(items, total, query);
   }
 
+  // ─── Technician CRUD ────────────────────────────────────
+
+  async createTechnician(dto: { name: string; phone: string; email?: string }) {
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: dto.name,
+          phone: dto.phone,
+          email: dto.email,
+          role: 'TECHNICIAN',
+        },
+      });
+      const technician = await tx.technician.create({
+        data: { userId: user.id },
+        include: {
+          user: { select: { id: true, name: true, email: true, phone: true, isActive: true, createdAt: true } },
+        },
+      });
+      return technician;
+    });
+  }
+
+  async updateTechnicianDetails(id: string, dto: { name?: string; email?: string }) {
+    const tech = await this.prisma.technician.findUnique({ where: { id }, select: { userId: true } });
+    if (!tech) return null;
+    return this.prisma.user.update({
+      where: { id: tech.userId },
+      data: { ...dto },
+      select: { id: true, name: true, email: true, phone: true, isActive: true },
+    });
+  }
+
+  async addSpecialization(technicianId: string, subServiceId: string) {
+    return this.prisma.technicianSpecialization.upsert({
+      where: { technicianId_subServiceId: { technicianId, subServiceId } },
+      create: { technicianId, subServiceId },
+      update: {},
+    });
+  }
+
+  async removeSpecialization(technicianId: string, subServiceId: string) {
+    return this.prisma.technicianSpecialization.deleteMany({
+      where: { technicianId, subServiceId },
+    });
+  }
+
+  async addServiceArea(technicianId: string, serviceAreaId: string) {
+    return this.prisma.technicianServiceArea.upsert({
+      where: { technicianId_serviceAreaId: { technicianId, serviceAreaId } },
+      create: { technicianId, serviceAreaId },
+      update: {},
+    });
+  }
+
+  async removeServiceArea(technicianId: string, serviceAreaId: string) {
+    return this.prisma.technicianServiceArea.deleteMany({
+      where: { technicianId, serviceAreaId },
+    });
+  }
+
+  async getEligibleTechnicians(subServiceId: string, pincode: string) {
+    return this.prisma.technician.findMany({
+      where: {
+        deletedAt: null,
+        verificationStatus: VerificationStatus.VERIFIED,
+        user: { isActive: true, deletedAt: null },
+        specializations: { some: { subServiceId } },
+        serviceAreas: { some: { serviceArea: { pincode, isActive: true, deletedAt: null } } },
+      },
+      include: {
+        user: { select: { id: true, name: true, phone: true, isActive: true } },
+        specializations: { include: { subService: { include: { category: true } } } },
+        serviceAreas: { include: { serviceArea: true } },
+      },
+      take: 50,
+    });
+  }
+
+  // ─── Customer CRUD ──────────────────────────────────────
+
+  async createCustomer(dto: { name: string; phone: string; email?: string }) {
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { name: dto.name, phone: dto.phone, email: dto.email, role: 'CUSTOMER' },
+      });
+      const customer = await tx.customer.create({
+        data: { userId: user.id },
+        include: {
+          user: { select: { id: true, name: true, email: true, phone: true, isActive: true, createdAt: true } },
+        },
+      });
+      return customer;
+    });
+  }
+
+  async updateCustomerDetails(id: string, dto: { name?: string; email?: string }) {
+    const customer = await this.prisma.customer.findUnique({ where: { id }, select: { userId: true } });
+    if (!customer) return null;
+    return this.prisma.user.update({
+      where: { id: customer.userId },
+      data: { ...dto },
+      select: { id: true, name: true, email: true, phone: true, isActive: true },
+    });
+  }
+
+  // ─── Admin Booking CRUD ─────────────────────────────────
+
+  async listBookings(query: any) {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (query.status) where.status = query.status;
+    if (query.search) {
+      where.OR = [
+        { bookingNumber: { contains: query.search, mode: 'insensitive' } },
+        { customer: { user: { name: { contains: query.search, mode: 'insensitive' } } } },
+        { technician: { user: { name: { contains: query.search, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.booking.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          customer: { select: { user: { select: { name: true, phone: true } } } },
+          technician: { select: { user: { select: { name: true, phone: true } } } },
+          subService: { select: { name: true } },
+        },
+      }),
+      this.prisma.booking.count({ where }),
+    ]);
+
+    return {
+      items,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getBookingDetails(id: string) {
+    return this.prisma.booking.findUnique({
+      where: { id },
+      include: {
+        customer: { include: { user: true } },
+        technician: { include: { user: true } },
+        subService: { include: { category: true } },
+        address: true,
+        timeline: { orderBy: { createdAt: 'desc' } },
+        payment: true,
+      },
+    });
+  }
+
+  async createAdminBooking(dto: {
+    customerId: string;
+    subServiceId: string;
+    addressId: string;
+    technicianId?: string;
+    scheduledDate: string;
+    scheduledSlot: string;
+    description?: string;
+    totalAmount: number;
+    adminUserId: string;
+  }) {
+    const count = await this.prisma.booking.count();
+    const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const bookingNumber = `FH-${date}-${String(count + 1).padStart(4, '0')}`;
+
+    return this.prisma.booking.create({
+      data: {
+        bookingNumber,
+        customerId: dto.customerId,
+        subServiceId: dto.subServiceId,
+        addressId: dto.addressId,
+        technicianId: dto.technicianId,
+        scheduledDate: new Date(dto.scheduledDate),
+        scheduledSlot: dto.scheduledSlot,
+        description: dto.description,
+        totalAmount: dto.totalAmount,
+        status: 'CONFIRMED',
+        createdBy: dto.adminUserId,
+        updatedBy: dto.adminUserId,
+      },
+      include: {
+        customer: { include: { user: { select: { id: true, name: true, phone: true } } } },
+        subService: { include: { category: true } },
+        address: true,
+      },
+    });
+  }
+
+  async softDeleteBooking(id: string, reason: string, adminUserId: string) {
+    const updated = await this.prisma.booking.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancelledBy: 'ADMIN',
+        cancelReason: reason,
+        archivedAt: new Date(), // Will be purged by background job after 90 days
+        updatedBy: adminUserId,
+      },
+    });
+    return updated;
+  }
+
+  async cancelBooking(id: string, reason: string, adminUserId: string) {
+    const updated = await this.prisma.booking.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancelledBy: 'ADMIN',
+        cancelReason: reason,
+        updatedBy: adminUserId,
+      },
+    });
+    return updated;
+  }
+
+  // ─── Pricing CRUD ───────────────────────────────────────
+
+  async listPricingRules() {
+    return this.prisma.pricingRule.findMany({ orderBy: { createdAt: 'asc' } });
+  }
+
+  async createPricingRule(dto: {
+    categoryId?: string;
+    label: string;
+    baseFee: number;
+    taxPercent: number;
+    cancellationFeePercent?: number;
+    cancellationWindowMins?: number;
+  }, adminUserId: string) {
+    return this.prisma.pricingRule.create({
+      data: {
+        categoryId: dto.categoryId,
+        label: dto.label,
+        baseFee: dto.baseFee,
+        taxPercent: dto.taxPercent,
+        cancellationFeePercent: dto.cancellationFeePercent ?? 10,
+        cancellationWindowMins: dto.cancellationWindowMins ?? 60,
+        updatedBy: adminUserId,
+      },
+    });
+  }
+
+  async updatePricingRule(id: string, dto: {
+    label?: string;
+    baseFee?: number;
+    taxPercent?: number;
+    cancellationFeePercent?: number;
+    cancellationWindowMins?: number;
+    isActive?: boolean;
+  }, adminUserId: string) {
+    return this.prisma.pricingRule.update({
+      where: { id },
+      data: { ...dto, updatedBy: adminUserId },
+    });
+  }
+
+  async deletePricingRule(id: string) {
+    return this.prisma.pricingRule.delete({ where: { id } });
+  }
+
+  // ─── Coupons CRUD ───────────────────────────────────────
+
+  async listCoupons(query: { isActive?: boolean; page?: number; limit?: number }) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const where: Prisma.CouponWhereInput = {
+      ...(query.isActive !== undefined && { isActive: query.isActive }),
+    };
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.coupon.findMany({ where, skip: (page - 1) * limit, take: limit, orderBy: { createdAt: 'desc' } }),
+      this.prisma.coupon.count({ where }),
+    ]);
+
+    return this.paginate(items, total, { page, limit });
+  }
+
+  async createCoupon(dto: {
+    code: string;
+    description?: string;
+    type: 'PERCENTAGE' | 'FLAT';
+    value: number;
+    maxDiscountAmount?: number;
+    minOrderAmount?: number;
+    firstBookingOnly?: boolean;
+    maxUses?: number;
+    expiresAt?: string;
+    categoryId?: string;
+  }, adminUserId: string) {
+    return this.prisma.coupon.create({
+      data: {
+        code: dto.code.toUpperCase(),
+        description: dto.description,
+        type: dto.type as any,
+        value: dto.value,
+        maxDiscountAmount: dto.maxDiscountAmount,
+        minOrderAmount: dto.minOrderAmount,
+        firstBookingOnly: dto.firstBookingOnly ?? false,
+        maxUses: dto.maxUses,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+        categoryId: dto.categoryId,
+        createdBy: adminUserId,
+      },
+    });
+  }
+
+  async updateCoupon(id: string, dto: {
+    description?: string;
+    maxUses?: number;
+    expiresAt?: string;
+    isActive?: boolean;
+  }) {
+    return this.prisma.coupon.update({
+      where: { id },
+      data: {
+        ...dto,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+      },
+    });
+  }
+
+  async deleteCoupon(id: string) {
+    return this.prisma.coupon.delete({ where: { id } });
+  }
+
   private customerSortField(sortBy?: string) {
     const allowed = new Set(['name', 'email', 'createdAt', 'updatedAt']);
     return allowed.has(sortBy ?? '') ? sortBy! : 'createdAt';

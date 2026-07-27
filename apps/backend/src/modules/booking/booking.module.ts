@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../common/database/prisma.module';
 import { RedisModule } from '../../common/redis/redis.module';
 import { StorageModule } from '../../common/storage/storage.module';
+import { AdminModule } from '../admin/admin.module';
 import { NotificationModule } from '../notification/notification.module';
 import { JobOfferRepository } from '../technician/repositories/job-offer.repository';
 import { TrackingModule } from '../tracking/tracking.module';
@@ -20,7 +21,7 @@ import { BookingQueryService } from './services/booking-query.service';
 import { BookingService } from './services/booking.service';
 
 @Module({
-  imports: [PrismaModule, RedisModule, StorageModule, NotificationModule, TrackingModule],
+  imports: [PrismaModule, RedisModule, StorageModule, NotificationModule, TrackingModule, AdminModule],
   controllers: [BookingController, AdminBookingController],
   providers: [
     BookingService,
@@ -40,3 +41,4 @@ import { BookingService } from './services/booking.service';
   exports: [BookingService, BookingLifecycleService, BookingDispatchService],
 })
 export class BookingModule {}
+

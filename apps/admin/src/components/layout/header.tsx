@@ -5,6 +5,7 @@ import * as React from 'react';
 import { Bell, ChevronRight, Search } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { NotificationDropdown } from './notification-dropdown';
 
 const routeLabels: Record<string, string> = {
   '/': 'Dashboard',
@@ -88,9 +89,8 @@ export function Header({ onCommandPalette }: HeaderProps) {
         </button>
 
         {/* Notifications */}
-        <button disabled className="relative flex h-8 w-8 items-center justify-center rounded-lg text-[#6B7280] opacity-50 pointer-events-none cursor-not-allowed">
-          <Bell className="h-4 w-4" />
-        </button>
+        <NotificationDropdown />
+
 
         {/* Divider */}
         <div className="h-5 w-px bg-[#E5E7EB]" />

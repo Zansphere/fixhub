@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { BookingStatus, Role } from '@prisma/client';
 
@@ -12,6 +13,7 @@ import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { AuthenticatedUser } from '../../../common/interfaces/auth.interface';
 import { StorageService } from '../../../common/storage/storage.service';
 import { PrismaService } from '../../../common/database/prisma.service';
+import { AdminNotificationService, AdminNotifType } from '../../admin/services/admin-notification.service';
 import { BookingSummaryDto, ConfirmBookingDto, CreateBookingDto, CreateBookingMediaDto, CreateReviewDto, ProposeRevisionDto } from '../dto';
 import { BookingRepository } from '../repositories/booking.repository';
 import { BookingLockService } from './booking-lock.service';
@@ -27,6 +29,7 @@ export class BookingService {
     private readonly storageService: StorageService,
     private readonly bookingQueryCacheService: BookingQueryCacheService,
     private readonly prisma: PrismaService,
+    @Optional() private readonly adminNotifService?: AdminNotificationService,
   ) {}
 
   async listByUser(userId: string, role: string, pagination: PaginationDto) {
@@ -179,6 +182,14 @@ export class BookingService {
       await this.bookingLockService.clearDraftExpiry(bookingId);
       await this.bookingQueryCacheService.invalidate();
 
+      // Notify admin of new confirmed booking (fire-and-forget)
+      this.adminNotifService?.createAndBroadcast(
+        AdminNotifType.NEW_BOOKING,
+        '📋 New Booking Confirmed',
+        `Booking #${confirmed.bookingNumber} has been confirmed by a customer.`,
+        { bookingId: confirmed.id, bookingNumber: confirmed.bookingNumber },
+      ).catch(() => { /* silent */ });
+
       return {
         booking: confirmed,
         confirmation: {
@@ -284,6 +295,15 @@ export class BookingService {
     });
 
     await this.bookingQueryCacheService.invalidate();
+
+    // Notify admin of technician assignment (fire-and-forget)
+    this.adminNotifService?.createAndBroadcast(
+      AdminNotifType.TECHNICIAN_ASSIGNED,
+      '🔧 Technician Assigned',
+      `A technician has been assigned to booking #${updated.bookingNumber}.`,
+      { bookingId: updated.id, bookingNumber: updated.bookingNumber, technicianId },
+    ).catch(() => { /* silent */ });
+
     return updated;
   }
 

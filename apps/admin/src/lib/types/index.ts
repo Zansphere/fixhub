@@ -224,6 +224,7 @@ export interface Booking {
   cancelReason?: string | null;
   failedAt?: string | null;
   failureReason?: string | null;
+  archivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   customer?: Customer;
@@ -277,6 +278,51 @@ export interface Notification {
   data?: Record<string, unknown> | null;
   isRead: boolean;
   createdAt: string;
+}
+
+// ─── Service Area Request ─────────────────────────────────
+export interface ServiceAreaRequest {
+  id: string;
+  pincode: string;
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  status: string;
+  createdAt: string;
+}
+
+// ─── Pricing & Coupons ────────────────────────────────────
+export interface PricingRule {
+  id: string;
+  categoryId?: string | null;
+  label: string;
+  baseFee: number | string;
+  taxPercent: number | string;
+  cancellationFeePercent: number | string;
+  cancellationWindowMins: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CouponType = 'PERCENTAGE' | 'FLAT';
+
+export interface Coupon {
+  id: string;
+  code: string;
+  description?: string | null;
+  type: CouponType;
+  value: number | string;
+  maxDiscountAmount?: number | string | null;
+  minOrderAmount?: number | string | null;
+  firstBookingOnly: boolean;
+  maxUses?: number | null;
+  usedCount: number;
+  expiresAt?: string | null;
+  isActive: boolean;
+  categoryId?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ─── Audit Log ────────────────────────────────────────────

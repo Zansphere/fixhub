@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { StorageModule } from '../../common/storage/storage.module';
+import { AdminModule } from '../admin/admin.module';
 import { BookingModule } from '../booking/booking.module';
 import { TrackingModule } from '../tracking/tracking.module';
 import { TechnicianController } from './controllers/technician.controller';
@@ -21,8 +22,11 @@ import { TechnicianSpecializationService } from './services/technician-specializ
 import { TechnicianService } from './services/technician.service';
 import { JobOfferService } from './services/job-offer.service';
 
+import { RedisModule } from '../../common/redis/redis.module';
+import { TechnicianHeartbeatService } from './services/technician-heartbeat.service';
+
 @Module({
-  imports: [StorageModule, BookingModule, TrackingModule],
+  imports: [StorageModule, BookingModule, TrackingModule, AdminModule, RedisModule],
   controllers: [TechnicianController],
   providers: [
     // Services
@@ -34,6 +38,7 @@ import { JobOfferService } from './services/job-offer.service';
     TechnicianReviewService,
     TechnicianEarningsService,
     JobOfferService,
+    TechnicianHeartbeatService,
     // Repositories
     TechnicianRepository,
     TechnicianDocumentRepository,
@@ -44,6 +49,7 @@ import { JobOfferService } from './services/job-offer.service';
     TechnicianEarningsRepository,
     JobOfferRepository,
   ],
-  exports: [TechnicianService],
+  exports: [TechnicianService, TechnicianHeartbeatService],
 })
 export class TechnicianModule {}
+

@@ -262,7 +262,7 @@ export default function DashboardPage() {
               <div className="py-8 text-center text-sm text-[#9CA3AF]">No bookings yet</div>
             ) : (
               <div className="divide-y divide-[#F3F4F6]">
-                {recentBookings.map((booking) => (
+                {recentBookings.map((booking: any) => (
                   <BookingRow key={booking.id} booking={booking} />
                 ))}
               </div>

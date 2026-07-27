@@ -3,6 +3,7 @@ import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common'
 import { BookingStatus, NotificationType } from '@prisma/client';
 
 import { AuthenticatedUser } from '../../../common/interfaces/auth.interface';
+import { AdminNotificationService, AdminNotifType } from '../../admin/services/admin-notification.service';
 import { NotificationService } from '../../notification/services/notification.service';
 import { TrackingGateway } from '../../tracking/tracking.gateway';
 import { UpdateBookingStatusDto } from '../dto';
@@ -30,6 +31,7 @@ export class BookingLifecycleService {
     private readonly bookingQueryCacheService: BookingQueryCacheService,
     private readonly notificationService: NotificationService,
     @Optional() private readonly trackingGateway: TrackingGateway,
+    @Optional() private readonly adminNotifService?: AdminNotificationService,
   ) {}
 
   async transition(bookingId: string, actor: AuthenticatedUser, dto: UpdateBookingStatusDto) {
@@ -95,6 +97,17 @@ export class BookingLifecycleService {
       } catch (err: any) {
         this.logger.warn(`WS broadcast failed for booking ${bookingId}: ${err.message}`);
       }
+    }
+
+    // Notify admin when a booking is cancelled
+    if (dto.status === BookingStatus.CANCELLED && this.adminNotifService) {
+      const bookingRef = updated.bookingNumber ?? bookingId;
+      this.adminNotifService.createAndBroadcast(
+        AdminNotifType.BOOKING_CANCELLED,
+        '🚫 Booking Cancelled',
+        `Booking #${bookingRef} has been cancelled.`,
+        { bookingId, bookingNumber: updated.bookingNumber, cancelReason: dto.cancelReason },
+      ).catch(() => { /* silent */ });
     }
 
     // Fire notifications asynchronously — failures must never break the transition

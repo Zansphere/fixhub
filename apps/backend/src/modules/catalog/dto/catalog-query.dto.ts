@@ -10,6 +10,27 @@ export class CategoryQueryDto extends PaginationDto {
   @Type(() => Boolean)
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ example: '600099' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  pincode?: string;
+
+  @ApiPropertyOptional({ example: 13.0827 })
+  @IsOptional()
+  @Type(() => Number)
+  latitude?: number;
+
+  @ApiPropertyOptional({ example: 80.2707 })
+  @IsOptional()
+  @Type(() => Number)
+  longitude?: number;
+
+  @ApiPropertyOptional({ example: 5000, description: 'Radius in meters' })
+  @IsOptional()
+  @Type(() => Number)
+  radius?: number;
 }
 
 export class ServiceQueryDto extends PaginationDto {
@@ -35,4 +56,19 @@ export class ServiceQueryDto extends PaginationDto {
   @IsString()
   @MaxLength(10)
   pincode?: string;
+
+  @ApiPropertyOptional({ example: 13.0827 })
+  @IsOptional()
+  @Type(() => Number)
+  latitude?: number;
+
+  @ApiPropertyOptional({ example: 80.2707 })
+  @IsOptional()
+  @Type(() => Number)
+  longitude?: number;
+
+  @ApiPropertyOptional({ example: 5000, description: 'Radius in meters' })
+  @IsOptional()
+  @Type(() => Number)
+  radius?: number;
 }

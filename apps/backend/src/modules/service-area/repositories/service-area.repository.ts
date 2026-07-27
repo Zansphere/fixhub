@@ -4,6 +4,7 @@ import { Prisma, VerificationStatus } from '@prisma/client';
 import { PrismaService } from '../../../common/database/prisma.service';
 import {
   CreateServiceAreaDto,
+  RequestCoverageDto,
   ServiceAreaQueryDto,
   UpdateServiceAreaDto,
 } from '../dto';
@@ -70,6 +71,9 @@ export class ServiceAreaRepository {
         _count: {
           select: { technicians: true },
         },
+        subServiceAreas: {
+          include: { subService: true }
+        }
       },
     });
   }
@@ -89,6 +93,30 @@ export class ServiceAreaRepository {
     });
   }
 
+  async findByLocation(latitude: number, longitude: number, publicOnly = false) {
+    const rawAreas = await this.prisma.$queryRaw<any[]>`
+      SELECT id 
+      FROM service_areas 
+      WHERE deleted_at IS NULL
+        ${publicOnly ? Prisma.sql`AND is_active = true` : Prisma.empty}
+        AND ST_Contains(boundary, ST_SetSRID(ST_MakePoint(${longitude}::float, ${latitude}::float), 4326))
+      LIMIT 1
+    `;
+
+    if (rawAreas.length === 0) {
+      return null;
+    }
+
+    return this.prisma.serviceArea.findUnique({
+      where: { id: rawAreas[0].id },
+      include: {
+        _count: {
+          select: { technicians: true },
+        },
+      },
+    });
+  }
+
   create(dto: CreateServiceAreaDto) {
     return this.prisma.serviceArea.create({
       data: {
@@ -97,6 +125,11 @@ export class ServiceAreaRepository {
         city: dto.city,
         state: dto.state,
         isActive: dto.isActive ?? true,
+        ...(dto.subServiceIds && dto.subServiceIds.length > 0 ? {
+          subServiceAreas: {
+            create: dto.subServiceIds.map(id => ({ subServiceId: id }))
+          }
+        } : {})
       },
     });
   }
@@ -110,6 +143,12 @@ export class ServiceAreaRepository {
         ...(dto.city !== undefined && { city: dto.city }),
         ...(dto.state !== undefined && { state: dto.state }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+        ...(dto.subServiceIds !== undefined ? {
+          subServiceAreas: {
+            deleteMany: {},
+            create: dto.subServiceIds.map(subServiceId => ({ subServiceId }))
+          }
+        } : {})
       },
     });
   }
@@ -141,8 +180,54 @@ export class ServiceAreaRepository {
     });
   }
 
+  createCoverageRequest(dto: RequestCoverageDto) {
+    return this.prisma.serviceAreaRequest.create({
+      data: {
+        pincode: dto.pincode,
+        name: dto.name,
+        phone: dto.phone,
+        email: dto.email,
+      },
+    });
+  }
+
+  async listCoverageRequests(query: { page?: number; limit?: number }) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.serviceAreaRequest.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.serviceAreaRequest.count(),
+    ]);
+
+    return {
+      items,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: page * limit < total,
+        hasPreviousPage: page > 1,
+      },
+    };
+  }
+
+  markCoverageRequestHandled(id: string) {
+    return this.prisma.serviceAreaRequest.update({
+      where: { id },
+      data: { status: 'ACKNOWLEDGED' },
+    });
+  }
+
   private sortField(sortBy?: string) {
     const allowed = new Set(['name', 'pincode', 'city', 'state', 'isActive', 'createdAt', 'updatedAt']);
     return allowed.has(sortBy ?? '') ? sortBy! : 'name';
   }
 }
+

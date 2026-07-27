@@ -2,7 +2,7 @@ import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { Public } from '../../../common/decorators/public.decorator';
-import { ServiceAreaQueryDto, ValidateServiceAreaDto } from '../dto';
+import { RequestCoverageDto, ServiceAreaQueryDto, ValidateServiceAreaDto } from '../dto';
 import { ServiceAreaService } from '../services/service-area.service';
 
 @Public()
@@ -24,4 +24,12 @@ export class ServiceAreaController {
   validate(@Body() dto: ValidateServiceAreaDto) {
     return this.serviceAreaService.validate(dto);
   }
+
+  @Post('request-coverage')
+  @ApiOperation({ summary: 'Submit a coverage request for an unserviced pincode (Notify me)' })
+  @ApiResponse({ status: 201, description: 'Coverage request logged and admin notified' })
+  requestCoverage(@Body() dto: RequestCoverageDto) {
+    return this.serviceAreaService.requestCoverage(dto);
+  }
 }
+

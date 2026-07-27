@@ -5,17 +5,150 @@ import Link from 'next/link';
 import { ArrowLeft, MapPin, ShieldCheck, Star } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { useTechnician, useVerifyTechnician, useUpdateTechnicianStatus } from '@/lib/api/queries/use-technicians';
+import { useTechnician, useVerifyTechnician, useUpdateTechnicianStatus, useUpdateTechnicianDetails } from '@/lib/api/queries/use-technicians';
 import { formatDate, formatDateTime, verificationStatusVariant } from '@/lib/utils';
 import type { VerificationStatus } from '@/lib/types';
-import { Avatar, Badge, Button, Card, CardContent, CardHeader, CardTitle, Skeleton, Tabs } from '@/components/ui';
+import { Avatar, Badge, Button, Card, CardContent, CardHeader, CardTitle, Skeleton, Dialog } from '@/components/ui';
+
+function ActionDialog({
+  open,
+  onClose,
+  title,
+  actionLabel,
+  isDanger,
+  requireNote,
+  onConfirm,
+  loading,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  actionLabel: string;
+  isDanger?: boolean;
+  requireNote?: boolean;
+  onConfirm: (note: string) => void;
+  loading?: boolean;
+}) {
+  const [note, setNote] = React.useState('');
+
+  React.useEffect(() => {
+    if (open) setNote('');
+  }, [open]);
+
+  const handleConfirm = () => {
+    if (requireNote && !note.trim()) {
+      return toast.error('Please provide a note');
+    }
+    onConfirm(note.trim());
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} title={title}>
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium text-[#374151] mb-1 block">
+            {requireNote ? 'Note (Required)' : 'Note (Optional)'}
+          </label>
+          <textarea
+            className="w-full resize-none rounded-lg border border-[#E5E7EB] bg-[#F8F8F7] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#6F7F5F33]"
+            rows={3}
+            placeholder="Add internal note..."
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button 
+            variant={isDanger ? 'danger' : 'primary'} 
+            onClick={handleConfirm} 
+            loading={loading}
+            disabled={requireNote && !note.trim()}
+          >
+            {actionLabel}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+function EditTechnicianDialog({
+  open,
+  onClose,
+  technician,
+}: {
+  open: boolean;
+  onClose: () => void;
+  technician: any;
+}) {
+  const [name, setName] = React.useState(technician?.user?.name ?? '');
+  const [email, setEmail] = React.useState(technician?.user?.email ?? '');
+  const updateMutation = useUpdateTechnicianDetails();
+
+  React.useEffect(() => {
+    if (open && technician) {
+      setName(technician.user?.name ?? '');
+      setEmail(technician.user?.email ?? '');
+    }
+  }, [open, technician]);
+
+  const handleSave = () => {
+    updateMutation.mutate(
+      { id: technician.id, payload: { name: name.trim(), email: email.trim() || undefined } },
+      {
+        onSuccess: () => {
+          toast.success('Technician details updated');
+          onClose();
+        },
+        onError: () => toast.error('Failed to update details'),
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} title="Edit Technician">
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium text-[#374151] mb-1 block">Full Name</label>
+          <input
+            type="text"
+            className="w-full rounded-lg border border-[#E5E7EB] bg-[#F8F8F7] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#6F7F5F33]"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#374151] mb-1 block">Email</label>
+          <input
+            type="email"
+            className="w-full rounded-lg border border-[#E5E7EB] bg-[#F8F8F7] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#6F7F5F33]"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={handleSave} loading={updateMutation.isPending}>
+            Save Changes
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
 
 export default function TechnicianProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = React.use(params);
   const { data: tech, isLoading } = useTechnician(resolvedParams.id);
   const verifyMutation = useVerifyTechnician();
   const statusMutation = useUpdateTechnicianStatus();
-  const [tab, setTab] = React.useState('overview');
+  
+  const [actionState, setActionState] = React.useState<{
+    open: boolean;
+    type: 'verify' | 'reject' | 'suspend' | 'activate' | null;
+  }>({ open: false, type: null });
+  const [editDialogOpen, setEditDialogOpen] = React.useState(false);
 
   if (isLoading) {
     return (
@@ -57,17 +190,18 @@ export default function TechnicianProfilePage({ params }: { params: Promise<{ id
             </p>
           </div>
           <div className="ml-auto flex gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setEditDialogOpen(true)}
+            >
+              Edit Details
+            </Button>
             {(vs === 'PENDING' || vs === 'UNDER_REVIEW') && (
               <Button
                 variant="primary"
                 size="sm"
-                loading={verifyMutation.isPending}
-                onClick={() =>
-                  verifyMutation.mutate(
-                    { id: tech.id, status: 'VERIFIED' },
-                    { onSuccess: () => toast.success('Technician verified') },
-                  )
-                }
+                onClick={() => setActionState({ open: true, type: 'verify' })}
               >
                 <ShieldCheck className="h-3.5 w-3.5" /> Verify
               </Button>
@@ -76,12 +210,7 @@ export default function TechnicianProfilePage({ params }: { params: Promise<{ id
               <Button
                 variant="danger"
                 size="sm"
-                onClick={() =>
-                  verifyMutation.mutate(
-                    { id: tech.id, status: 'REJECTED', rejectionNote: 'Documents incomplete' },
-                    { onSuccess: () => toast.error('Technician rejected') },
-                  )
-                }
+                onClick={() => setActionState({ open: true, type: 'reject' })}
               >
                 Reject
               </Button>
@@ -89,12 +218,7 @@ export default function TechnicianProfilePage({ params }: { params: Promise<{ id
             <Button
               variant="secondary"
               size="sm"
-              onClick={() =>
-                statusMutation.mutate(
-                  { userId: tech.userId, isActive: !tech.user?.isActive },
-                  { onSuccess: () => toast.success(tech.user?.isActive ? 'Account suspended' : 'Account activated') },
-                )
-              }
+              onClick={() => setActionState({ open: true, type: tech.user?.isActive ? 'suspend' : 'activate' })}
             >
               {tech.user?.isActive ? 'Suspend' : 'Activate'}
             </Button>
@@ -102,20 +226,7 @@ export default function TechnicianProfilePage({ params }: { params: Promise<{ id
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs
-        tabs={[
-          { id: 'overview', label: 'Overview' },
-          { id: 'documents', label: 'Documents', count: tech.documents?.length },
-          { id: 'specializations', label: 'Services', count: tech.specializations?.length },
-          { id: 'areas', label: 'Areas', count: tech.serviceAreas?.length },
-        ]}
-        activeTab={tab}
-        onChange={setTab}
-      />
-
-      {tab === 'overview' && (
-        <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3">
           {/* Personal Details */}
           <Card className="lg:col-span-2">
             <CardHeader><CardTitle>Personal Details</CardTitle></CardHeader>
@@ -142,7 +253,6 @@ export default function TechnicianProfilePage({ params }: { params: Promise<{ id
             </CardContent>
           </Card>
 
-          {/* Stats */}
           <div className="space-y-4">
             <Card>
               <CardContent className="pt-5">
@@ -165,9 +275,7 @@ export default function TechnicianProfilePage({ params }: { params: Promise<{ id
             </Card>
           </div>
         </div>
-      )}
 
-      {tab === 'documents' && (
         <Card>
           <CardHeader><CardTitle>Documents</CardTitle></CardHeader>
           <CardContent>
@@ -198,9 +306,7 @@ export default function TechnicianProfilePage({ params }: { params: Promise<{ id
             )}
           </CardContent>
         </Card>
-      )}
 
-      {tab === 'specializations' && (
         <Card>
           <CardHeader><CardTitle>Service Specializations</CardTitle></CardHeader>
           <CardContent>
@@ -218,9 +324,7 @@ export default function TechnicianProfilePage({ params }: { params: Promise<{ id
             )}
           </CardContent>
         </Card>
-      )}
 
-      {tab === 'areas' && (
         <Card>
           <CardHeader><CardTitle>Service Areas</CardTitle></CardHeader>
           <CardContent>
@@ -244,7 +348,57 @@ export default function TechnicianProfilePage({ params }: { params: Promise<{ id
             )}
           </CardContent>
         </Card>
-      )}
+
+      <ActionDialog
+        open={actionState.open}
+        onClose={() => setActionState({ open: false, type: null })}
+        title={
+          actionState.type === 'verify' ? 'Verify Technician' :
+          actionState.type === 'reject' ? 'Reject Technician' :
+          actionState.type === 'suspend' ? 'Suspend Account' :
+          'Activate Account'
+        }
+        actionLabel={
+          actionState.type === 'verify' ? 'Verify' :
+          actionState.type === 'reject' ? 'Reject' :
+          actionState.type === 'suspend' ? 'Suspend' :
+          'Activate'
+        }
+        isDanger={actionState.type === 'reject' || actionState.type === 'suspend'}
+        requireNote={actionState.type === 'reject' || actionState.type === 'suspend'}
+        loading={actionState.type === 'verify' || actionState.type === 'reject' ? verifyMutation.isPending : statusMutation.isPending}
+        onConfirm={(note) => {
+          if (!tech) return;
+          if (actionState.type === 'verify') {
+            verifyMutation.mutate(
+              { id: tech.id, status: 'VERIFIED' },
+              { 
+                onSuccess: () => { toast.success('Technician verified'); setActionState({ open: false, type: null }); }
+              }
+            );
+          } else if (actionState.type === 'reject') {
+            verifyMutation.mutate(
+              { id: tech.id, status: 'REJECTED', rejectionNote: note },
+              { 
+                onSuccess: () => { toast.error('Technician rejected'); setActionState({ open: false, type: null }); }
+              }
+            );
+          } else if (actionState.type === 'suspend' || actionState.type === 'activate') {
+            statusMutation.mutate(
+              { userId: tech.userId, isActive: actionState.type === 'activate' },
+              { 
+                onSuccess: () => { toast.success(`Account ${actionState.type}d`); setActionState({ open: false, type: null }); }
+              }
+            );
+          }
+        }}
+      />
+
+      <EditTechnicianDialog
+        open={editDialogOpen}
+        onClose={() => setEditDialogOpen(false)}
+        technician={tech}
+      />
     </div>
   );
 }

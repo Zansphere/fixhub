@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { QueueModule } from '../../common/queue/queue.module';
 import { RedisModule } from '../../common/redis/redis.module';
+import { AdminModule } from '../admin/admin.module';
 import { BookingModule } from '../booking/booking.module';
 import { NotificationModule } from '../notification/notification.module';
 import { AdminPaymentController } from './controllers/admin-payment.controller';
@@ -12,9 +13,10 @@ import { PaymentService } from './services/payment.service';
 import { RazorpayGatewayService } from './services/razorpay-gateway.service';
 
 @Module({
-  imports: [QueueModule, RedisModule, BookingModule, NotificationModule],
+  imports: [QueueModule, RedisModule, BookingModule, NotificationModule, AdminModule],
   controllers: [PaymentController, AdminPaymentController],
   providers: [PaymentService, RazorpayGatewayService, PaymentRepository, PaymentWebhookProcessor],
   exports: [PaymentService],
 })
 export class PaymentModule {}
+

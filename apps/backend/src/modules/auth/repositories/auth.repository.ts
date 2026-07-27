@@ -14,7 +14,7 @@ export class AuthRepository {
   // ── User Operations ───────────────────────────────────────
 
   async findUserByPhone(phone: string) {
-    return this.prisma.user.findUnique({
+    return this.prisma.user.findFirst({
       where: { phone, deletedAt: null },
     });
   }
@@ -30,7 +30,7 @@ export class AuthRepository {
   }
 
   async findUserByEmail(email: string) {
-    return this.prisma.user.findUnique({
+    return this.prisma.user.findFirst({
       where: { email, deletedAt: null },
     });
   }

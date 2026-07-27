@@ -7,11 +7,15 @@ import { CatalogController } from './controllers/catalog.controller';
 import { CatalogRepository } from './repositories/catalog.repository';
 import { CatalogCacheService } from './services/catalog-cache.service';
 import { CatalogService } from './services/catalog.service';
+import { CatalogSyncService } from './services/catalog-sync.service';
+
+import { QueueModule } from '../../common/queue/queue.module';
+import { CatalogSyncWorker } from './workers/catalog-sync.worker';
 
 @Module({
-  imports: [PrismaModule, RedisModule],
+  imports: [PrismaModule, RedisModule, QueueModule],
   controllers: [CatalogController, AdminCatalogController],
-  providers: [CatalogService, CatalogRepository, CatalogCacheService],
+  providers: [CatalogService, CatalogRepository, CatalogCacheService, CatalogSyncService, CatalogSyncWorker],
   exports: [CatalogService],
 })
 export class CatalogModule {}

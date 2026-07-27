@@ -3,7 +3,8 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useBooking, useAssignTechnician, useUpdateNotes, useCancelBooking } from '@/lib/api/queries/use-bookings';
-import { useTechnicians } from '@/lib/api/queries/use-technicians';
+import { useEligibleTechnicians } from '@/lib/api/queries/use-technicians';
+import { useRefundPayment } from '@/lib/api/queries/use-payments';
 import { bookingStatusLabel, bookingStatusVariant, formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import type { BookingStatus, BookingTimeline } from '@/lib/types';
 import { Avatar, Badge, Button, Card, CardContent, CardHeader, CardTitle, Skeleton, Dialog, Select } from '@/components/ui';
@@ -40,12 +41,16 @@ function AssignTechnicianDialog({
   open,
   onClose,
   bookingId,
+  subServiceId,
+  pincode,
 }: {
   open: boolean;
   onClose: () => void;
   bookingId: string;
+  subServiceId: string;
+  pincode: string;
 }) {
-  const { data: techData, isLoading: isLoadingTechs } = useTechnicians({ limit: 100 });
+  const { data: techData, isLoading: isLoadingTechs } = useEligibleTechnicians(subServiceId, pincode);
   const assignMutation = useAssignTechnician();
   const [selectedTech, setSelectedTech] = React.useState('');
 
@@ -67,8 +72,7 @@ function AssignTechnicianDialog({
     );
   };
 
-  const options = (techData?.items ?? [])
-    .filter((t) => (t.user?.isActive ?? true) && t.verificationStatus === 'VERIFIED')
+  const options = (techData ?? [])
     .map((t) => ({
       label: `${t.user?.name || 'Unknown'} (${t.user?.phone})`,
       value: t.id,
@@ -78,9 +82,9 @@ function AssignTechnicianDialog({
     <Dialog open={open} onClose={onClose} title="Assign Technician">
       <div className="space-y-4">
         {isLoadingTechs ? (
-          <p className="text-sm text-[#6B7280]">Loading technicians...</p>
+          <p className="text-sm text-[#6B7280]">Loading eligible technicians...</p>
         ) : options.length === 0 ? (
-          <p className="text-sm text-[#EF4444]">No approved/active technicians available.</p>
+          <p className="text-sm text-[#EF4444]">No eligible technicians available for this service in this area.</p>
         ) : (
           <Select
             label="Select Technician"
@@ -105,13 +109,142 @@ function AssignTechnicianDialog({
   );
 }
 
+function CancelBookingDialog({
+  open,
+  onClose,
+  bookingId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  bookingId: string;
+}) {
+  const [reason, setReason] = React.useState('');
+  const cancelMutation = useCancelBooking();
+
+  React.useEffect(() => {
+    if (open) setReason('');
+  }, [open]);
+
+  const handleCancel = () => {
+    if (!reason.trim()) return toast.error('Please provide a cancellation reason');
+    cancelMutation.mutate(
+      { bookingId, reason: reason.trim() },
+      {
+        onSuccess: () => {
+          toast.success('Booking cancelled successfully');
+          onClose();
+        },
+        onError: () => toast.error('Failed to cancel booking'),
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} title="Cancel Booking">
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium text-[#374151] mb-1 block">Cancellation Reason</label>
+          <textarea
+            className="w-full resize-none rounded-lg border border-[#E5E7EB] bg-[#F8F8F7] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#6F7F5F33]"
+            rows={3}
+            placeholder="Reason for cancellation (mandatory)..."
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={onClose}>Back</Button>
+          <Button variant="danger" onClick={handleCancel} loading={cancelMutation.isPending} disabled={!reason.trim()}>
+            Cancel Booking
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+function RefundDialog({
+  open,
+  onClose,
+  paymentId,
+  maxAmount,
+}: {
+  open: boolean;
+  onClose: () => void;
+  paymentId: string;
+  maxAmount: number;
+}) {
+  const [amount, setAmount] = React.useState<string>(maxAmount.toString());
+  const [reason, setReason] = React.useState('');
+  const refundMutation = useRefundPayment();
+
+  React.useEffect(() => {
+    if (open) {
+      setAmount(maxAmount.toString());
+      setReason('');
+    }
+  }, [open, maxAmount]);
+
+  const handleRefund = () => {
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount) || numAmount <= 0 || numAmount > maxAmount) {
+      return toast.error(`Please enter a valid amount up to ${maxAmount}`);
+    }
+    refundMutation.mutate(
+      { paymentId, amount: numAmount, reason: reason.trim() },
+      {
+        onSuccess: () => {
+          toast.success('Refund processed successfully');
+          onClose();
+        },
+        onError: () => toast.error('Failed to process refund'),
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} title="Process Refund">
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium text-[#374151] mb-1 block">Refund Amount (₹)</label>
+          <input
+            type="number"
+            className="w-full rounded-lg border border-[#E5E7EB] bg-[#F8F8F7] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#6F7F5F33]"
+            value={amount}
+            max={maxAmount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-[#6B7280]">Max refund: {formatCurrency(maxAmount)}</p>
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#374151] mb-1 block">Reason (Optional)</label>
+          <input
+            type="text"
+            className="w-full rounded-lg border border-[#E5E7EB] bg-[#F8F8F7] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#6F7F5F33]"
+            placeholder="e.g. Customer request"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="danger" onClick={handleRefund} loading={refundMutation.isPending}>
+            Confirm Refund
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 export default function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = React.use(params);
   const { data: booking, isLoading } = useBooking(resolvedParams.id);
   const [assignDialogOpen, setAssignDialogOpen] = React.useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false);
+  const [refundDialogOpen, setRefundDialogOpen] = React.useState(false);
   const [notes, setNotes] = React.useState('');
   const updateNotesMutation = useUpdateNotes();
-  const cancelBookingMutation = useCancelBooking();
 
   React.useEffect(() => {
     if (booking?.notes) {
@@ -126,18 +259,6 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
       {
         onSuccess: () => toast.success('Notes saved successfully'),
         onError: () => toast.error('Failed to save notes'),
-      }
-    );
-  };
-
-  const handleCancelBooking = () => {
-    if (!booking) return;
-    if (!confirm('Are you sure you want to cancel this booking?')) return;
-    cancelBookingMutation.mutate(
-      { bookingId: booking.id, reason: 'Cancelled by admin' },
-      {
-        onSuccess: () => toast.success('Booking cancelled successfully'),
-        onError: () => toast.error('Failed to cancel booking'),
       }
     );
   };
@@ -158,6 +279,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   if (!booking) return <div className="text-sm text-[#9CA3AF]">Booking not found.</div>;
 
   const status = booking.status as BookingStatus;
+  const customerName = booking.customer?.user?.name || 'Customer 1';
 
   return (
     <div className="space-y-5 fade-in">
@@ -170,10 +292,12 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
         </Link>
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-lg font-bold text-[#111827]">{booking.bookingNumber}</h1>
+            <h1 className="text-lg font-bold text-[#111827]">
+              {customerName}
+            </h1>
             <Badge variant={bookingStatusVariant(status)}>{bookingStatusLabel(status)}</Badge>
           </div>
-          <p className="text-sm text-[#6B7280]">Created {formatDateTime(booking.createdAt)}</p>
+          <p className="text-sm text-[#6B7280]">Booking ID: {booking.bookingNumber} · Created {formatDateTime(booking.createdAt)}</p>
         </div>
       </div>
 
@@ -354,13 +478,19 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                   variant="secondary" 
                   className="w-full" 
                   size="sm"
-                  onClick={handleCancelBooking}
-                  loading={cancelBookingMutation.isPending}
+                  onClick={() => setCancelDialogOpen(true)}
                 >
                   Cancel Booking
                 </Button>
                 {booking.payment?.status === 'CAPTURED' && (
-                  <Button variant="danger" className="w-full" size="sm" disabled>Process Refund</Button>
+                  <Button 
+                    variant="danger" 
+                    className="w-full" 
+                    size="sm" 
+                    onClick={() => setRefundDialogOpen(true)}
+                  >
+                    Process Refund
+                  </Button>
                 )}
               </CardContent>
             </Card>
@@ -372,7 +502,24 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
         open={assignDialogOpen}
         onClose={() => setAssignDialogOpen(false)}
         bookingId={resolvedParams.id}
+        subServiceId={booking.subService?.id ?? ''}
+        pincode={booking.address?.pincode ?? ''}
       />
+
+      <CancelBookingDialog
+        open={cancelDialogOpen}
+        onClose={() => setCancelDialogOpen(false)}
+        bookingId={resolvedParams.id}
+      />
+
+      {booking.payment && (
+        <RefundDialog
+          open={refundDialogOpen}
+          onClose={() => setRefundDialogOpen(false)}
+          paymentId={booking.payment.id}
+          maxAmount={Number(booking.payment.amount)}
+        />
+      )}
     </div>
   );
 }

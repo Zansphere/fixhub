@@ -1,8 +1,10 @@
 import { ErrorCodes } from '@fixhub/shared';
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 
+import { AdminNotificationService, AdminNotifType } from '../../admin/services/admin-notification.service';
 import {
   CreateServiceAreaDto,
+  RequestCoverageDto,
   ServiceAreaQueryDto,
   UpdateServiceAreaDto,
   ValidateServiceAreaDto,
@@ -15,6 +17,7 @@ export class ServiceAreaService {
   constructor(
     private readonly serviceAreaRepository: ServiceAreaRepository,
     private readonly cacheService: ServiceAreaCacheService,
+    @Optional() private readonly adminNotifService?: AdminNotificationService,
   ) {}
 
   async list(query: ServiceAreaQueryDto, publicOnly = true) {
@@ -31,14 +34,23 @@ export class ServiceAreaService {
   }
 
   async validate(dto: ValidateServiceAreaDto) {
-    const cacheKey = `validate:${dto.pincode}`;
+    const cacheKey = dto.latitude && dto.longitude 
+      ? `validate:${dto.pincode}:${dto.latitude}:${dto.longitude}`
+      : `validate:${dto.pincode}`;
     const cached = await this.cacheService.get(cacheKey);
 
     if (cached) {
       return cached;
     }
 
-    const area = await this.serviceAreaRepository.findByPincode(dto.pincode, false);
+    let area = null;
+    if (dto.latitude !== undefined && dto.longitude !== undefined) {
+      area = await this.serviceAreaRepository.findByLocation(dto.latitude, dto.longitude, false);
+    }
+    
+    if (!area) {
+      area = await this.serviceAreaRepository.findByPincode(dto.pincode, false);
+    }
 
     if (!area) {
       const result = {
@@ -104,6 +116,30 @@ export class ServiceAreaService {
     const updated = await this.serviceAreaRepository.update(id, dto);
     await this.cacheService.invalidate();
     return updated;
+  }
+
+  async requestCoverage(dto: RequestCoverageDto) {
+    const record = await this.serviceAreaRepository.createCoverageRequest(dto);
+
+    // Notify admin in real-time
+    if (this.adminNotifService) {
+      await this.adminNotifService.createAndBroadcast(
+        AdminNotifType.SERVICE_AREA_REQUEST,
+        '📍 New Service Area Request',
+        `Pincode ${dto.pincode} was requested by a customer${dto.name ? ` (${dto.name})` : ''}.`,
+        { pincode: dto.pincode, requestId: record.id, phone: dto.phone, email: dto.email },
+      );
+    }
+
+    return { success: true, id: record.id };
+  }
+
+  async listCoverageRequests(query: { page?: number; limit?: number }) {
+    return this.serviceAreaRepository.listCoverageRequests(query);
+  }
+
+  async markCoverageRequestHandled(id: string) {
+    return this.serviceAreaRepository.markCoverageRequestHandled(id);
   }
 
   async delete(id: string) {

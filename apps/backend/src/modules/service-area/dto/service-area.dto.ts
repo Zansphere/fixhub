@@ -25,6 +25,11 @@ export class CreateServiceAreaDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ example: ['service-uuid-1'] })
+  @IsOptional()
+  @IsString({ each: true })
+  subServiceIds?: string[];
 }
 
 export class UpdateServiceAreaDto {
@@ -55,4 +60,9 @@ export class UpdateServiceAreaDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ example: ['service-uuid-1'] })
+  @IsOptional()
+  @IsString({ each: true })
+  subServiceIds?: string[];
 }
