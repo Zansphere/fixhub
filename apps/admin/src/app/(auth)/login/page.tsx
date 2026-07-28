@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { endpoints } from '@/lib/api/endpoints';
+import { setAdminSessionMarker } from '@/lib/auth/session';
 import { Button, Input } from '@/components/ui';
 import { Zap } from 'lucide-react';
 
@@ -33,6 +34,7 @@ export default function LoginPage() {
       return res.data.data;
     },
     onSuccess: (data) => {
+      setAdminSessionMarker();
       toast.success('Logged in successfully');
       router.push('/');
     },

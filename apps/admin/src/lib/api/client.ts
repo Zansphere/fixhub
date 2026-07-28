@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { endpoints } from './endpoints';
+import { clearAdminSessionMarker } from '@/lib/auth/session';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -39,6 +40,7 @@ apiClient.interceptors.response.use(
       // If the refresh itself fails, log out
       if (originalRequest.url?.includes(endpoints.auth.refresh) || (originalRequest as any)._isRefreshRequest) {
         if (typeof window !== 'undefined') {
+          clearAdminSessionMarker();
           window.location.href = '/login';
         }
         return Promise.reject(error);
@@ -84,6 +86,7 @@ apiClient.interceptors.response.use(
         isRefreshing = false;
         processQueue(refreshError as Error);
         if (typeof window !== 'undefined') {
+          clearAdminSessionMarker();
           window.location.href = '/login';
         }
         return Promise.reject(refreshError);

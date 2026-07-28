@@ -129,7 +129,13 @@ export const appConfig = () => ({
   },
 
   cors: {
-    origins: (process.env.CORS_ORIGINS || 'http://localhost:3001').split(','),
+    origins: (
+      process.env.CORS_ORIGINS ||
+      'http://localhost:3001,https://fixhub-admin-neon.vercel.app'
+    )
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
   },
 
   throttle: {

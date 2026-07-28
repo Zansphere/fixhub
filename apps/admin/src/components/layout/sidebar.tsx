@@ -81,6 +81,7 @@ const navGroups: NavGroup[] = [
 import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { endpoints } from '@/lib/api/endpoints';
+import { clearAdminSessionMarker } from '@/lib/auth/session';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -102,6 +103,7 @@ export function Sidebar() {
       // Regardless of success or failure, we clear local storage and redirect
       // to ensure the user is not stuck if the token is already expired.
       localStorage.removeItem('fixhub_admin_token');
+      clearAdminSessionMarker();
       router.push('/login');
     }
   });

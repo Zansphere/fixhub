@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const publicRoutes = ['/login', '/_next', '/favicon.ico', '/api'];
+const sessionMarker = 'fixhubAdminSession';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -16,9 +17,10 @@ export async function middleware(request: NextRequest) {
 
   const accessToken = request.cookies.get('accessToken')?.value;
   const refreshToken = request.cookies.get('refreshToken')?.value;
+  const adminSession = request.cookies.get(sessionMarker)?.value;
   const isAuthRoute = pathname === '/login';
 
-  const hasToken = !!accessToken || !!refreshToken;
+  const hasToken = !!accessToken || !!refreshToken || adminSession === '1';
 
   if (!hasToken && !isAuthRoute) {
     // Unauthenticated user trying to access protected route -> redirect to login
@@ -26,6 +28,7 @@ export async function middleware(request: NextRequest) {
     const response = NextResponse.redirect(loginUrl);
     response.cookies.delete('accessToken');
     response.cookies.delete('refreshToken');
+    response.cookies.delete(sessionMarker);
     return response;
   }
 

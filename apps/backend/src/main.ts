@@ -35,7 +35,7 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // CORS
-  const corsOrigins = configService.get<string[]>('cors.origins', ['http://localhost:3001']);
+  const corsOrigins = configService.get<string[]>('cors.origins', ['http://localhost:3001', 'https://fixhub-admin-neon.vercel.app']);
   app.enableCors({
     origin: corsOrigins,
     credentials: true,
