@@ -3,11 +3,13 @@ import { endpoints } from './endpoints';
 import { clearAdminSessionMarker } from '@/lib/auth/session';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+const isNgrokApi = API_BASE_URL.includes('.ngrok-free.');
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    ...(isNgrokApi ? { 'ngrok-skip-browser-warning': 'true' } : {}),
   },
   timeout: 15000,
   withCredentials: true,
