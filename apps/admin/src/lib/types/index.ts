@@ -105,6 +105,7 @@ export interface ServiceArea {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  subServiceAreas?: SubServiceArea[];
 }
 
 // ─── Category ─────────────────────────────────────────────
@@ -136,6 +137,19 @@ export interface SubService {
   createdAt: string;
   updatedAt: string;
   category?: Pick<Category, 'id' | 'name' | 'slug'>;
+  activeAreas?: SubServiceArea[];
+}
+
+export interface SubServiceArea {
+  id: string;
+  subServiceId: string;
+  serviceAreaId: string;
+  isActive: boolean;
+  systemActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  serviceArea?: ServiceArea;
+  subService?: SubService;
 }
 
 // ─── Technician ───────────────────────────────────────────

@@ -21,7 +21,7 @@ export function useServiceAreas(params?: { page?: number; limit?: number; search
 export function useCreateServiceArea() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { name: string; pincode: string; city: string; state: string; isActive?: boolean }) => {
+    mutationFn: async (payload: { name: string; pincode: string; city: string; state: string; isActive?: boolean; subServiceIds?: string[] }) => {
       const { data } = await apiClient.post(endpoints.serviceAreas.create, payload);
       return data;
     },
@@ -34,7 +34,7 @@ export function useCreateServiceArea() {
 export function useUpdateServiceArea() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...payload }: { id: string; name?: string; isActive?: boolean }) => {
+    mutationFn: async ({ id, ...payload }: { id: string; name?: string; isActive?: boolean; subServiceIds?: string[] }) => {
       const { data } = await apiClient.patch(endpoints.serviceAreas.update(id), payload);
       return data;
     },

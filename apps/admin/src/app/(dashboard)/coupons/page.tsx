@@ -292,7 +292,7 @@ export default function CouponsPage() {
         const c = row.original;
         return (
           <span className="text-sm text-[#374151]">
-            {c.timesUsed} {c.maxUses ? `/ ${c.maxUses}` : ''}
+            {c.usedCount} {c.maxUses ? `/ ${c.maxUses}` : ''}
           </span>
         );
       },

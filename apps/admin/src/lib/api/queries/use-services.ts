@@ -38,6 +38,7 @@ export function useCreateService() {
       basePrice: number;
       estimatedDurationMins: number;
       isActive?: boolean;
+      serviceAreaIds?: string[];
     }) => {
       const { data } = await apiClient.post(endpoints.catalog.createService, payload);
       return data;
@@ -51,7 +52,7 @@ export function useCreateService() {
 export function useUpdateService() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...payload }: { id: string; name?: string; description?: string; isActive?: boolean }) => {
+    mutationFn: async ({ id, ...payload }: { id: string; name?: string; description?: string; basePrice?: number; estimatedDurationMins?: number; isActive?: boolean; serviceAreaIds?: string[] }) => {
       const { data } = await apiClient.patch(endpoints.catalog.updateService(id), payload);
       return data;
     },
