@@ -554,6 +554,7 @@ class _Step3ServiceAreas extends ConsumerStatefulWidget {
 class _Step3ServiceAreasState extends ConsumerState<_Step3ServiceAreas> {
   final _nameController = TextEditingController();
   final _pincodeController = TextEditingController();
+  bool _hasAutoAdded = false;
 
   @override
   void dispose() {
@@ -622,12 +623,15 @@ class _Step3ServiceAreasState extends ConsumerState<_Step3ServiceAreas> {
             data: (detected) {
               if (detected == null) return const Text('Could not detect location. Please add manually.', style: TextStyle(color: AppColors.error));
               
-              // Automatically add if not present
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!state.customAreas.any((a) => a['pincode'] == detected['pincode'])) {
-                  ref.read(setupWizardProvider.notifier).addCustomArea(detected['name']!, detected['pincode']!);
-                }
-              });
+              // Auto-add once on first load; if user deletes it, it stays deleted
+              if (!_hasAutoAdded) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && !state.customAreas.any((a) => a['pincode'] == detected['pincode'])) {
+                    ref.read(setupWizardProvider.notifier).addCustomArea(detected['name']!, detected['pincode']!);
+                  }
+                  setState(() => _hasAutoAdded = true);
+                });
+              }
 
               return Row(
                 children: [

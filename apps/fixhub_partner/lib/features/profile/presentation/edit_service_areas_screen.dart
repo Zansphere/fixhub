@@ -23,6 +23,7 @@ class _EditServiceAreasScreenState
   List<Map<String, String>> _customAreas = [];
   bool _isSaving = false;
   bool _isInitialized = false;
+  bool _hasAutoAdded = false;
 
   final _nameController = TextEditingController();
   final _pincodeController = TextEditingController();
@@ -50,10 +51,14 @@ class _EditServiceAreasScreenState
       final List<Map<String, String>> areas = [];
       for (var a in serviceAreas) {
         if (a is Map<String, dynamic>) {
-          if (a['pincode'] != null && a['name'] != null) {
+          // Backend returns: { "serviceArea": { "name": ..., "pincode": ... } }
+          final sa = a['serviceArea'] as Map<String, dynamic>?;
+          final name = (sa?['name'] ?? a['name']) as String?;
+          final pincode = (sa?['pincode'] ?? a['pincode']) as String?;
+          if (pincode != null && name != null) {
              areas.add({
-               'name': a['name'] as String,
-               'pincode': a['pincode'] as String,
+               'name': name,
+               'pincode': pincode,
              });
           }
         }
@@ -150,14 +155,19 @@ class _EditServiceAreasScreenState
               data: (detected) {
                 if (detected == null) return const Text('Could not detect location. Please add manually.', style: TextStyle(color: AppColors.error));
                 
-                // Automatically add if not present
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!_customAreas.any((a) => a['pincode'] == detected['pincode'])) {
-                    setState(() {
-                      _customAreas.add({'name': detected['name']!, 'pincode': detected['pincode']!});
-                    });
-                  }
-                });
+                // Auto-add once on first load; if user deletes it, it stays deleted
+                if (!_hasAutoAdded) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && !_customAreas.any((a) => a['pincode'] == detected['pincode'])) {
+                      setState(() {
+                        _customAreas.add({'name': detected['name']!, 'pincode': detected['pincode']!});
+                        _hasAutoAdded = true;
+                      });
+                    } else {
+                      _hasAutoAdded = true;
+                    }
+                  });
+                }
 
                 return Row(
                   children: [
