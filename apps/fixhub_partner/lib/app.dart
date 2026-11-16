@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/config/theme/app_theme.dart';
 import 'core/routing/app_router.dart';
 
+/// Global ScaffoldMessengerKey so FcmService can show SnackBars for
+/// foreground push notifications without needing a BuildContext.
+final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 class App extends ConsumerWidget {
   const App({super.key});
 
@@ -14,9 +18,10 @@ class App extends ConsumerWidget {
       title: 'FixHub Partner',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.light, // MVP forces light theme
+      themeMode: ThemeMode.light,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: scaffoldMessengerKey,
     );
   }
 }

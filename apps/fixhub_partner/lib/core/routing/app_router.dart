@@ -41,6 +41,8 @@ class RouteNames {
 }
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
+// Exported so FcmService can show SnackBars & navigate from push notifications
+final GlobalKey<NavigatorState> appNavigatorKey = _rootNavigatorKey;
 final GlobalKey<NavigatorState> _homeNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<NavigatorState> _jobsNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<NavigatorState> _earningsNavigatorKey = GlobalKey<NavigatorState>();

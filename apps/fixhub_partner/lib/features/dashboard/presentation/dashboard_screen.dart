@@ -17,6 +17,7 @@ import '../../jobs/presentation/job_provider.dart';
 import '../../jobs/domain/job_models.dart';
 import '../../earnings/presentation/earnings_provider.dart';
 import '../../notifications/presentation/notification_provider.dart';
+import '../../../core/services/fcm_service.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -27,6 +28,15 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _isTogglingAvailability = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize FCM after dashboard mounts (technician is authenticated at this point)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(fcmServiceProvider).initialize();
+    });
+  }
 
   Future<void> _toggleAvailability(bool value) async {
     setState(() => _isTogglingAvailability = true);
