@@ -34,7 +34,7 @@ class TrackingState {
 // Data source provider
 @riverpod
 TrackingRemoteDataSource trackingRemoteDataSource(Ref ref) {
-  final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:3000/api/v1';
+  final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://192.168.29.26:3000/api/v1';
   final dataSource = TrackingRemoteDataSource(baseUrl);
   
   ref.onDispose(() {
