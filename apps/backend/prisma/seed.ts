@@ -129,20 +129,24 @@ async function main() {
   // ── Layer 1: Admin User ───────────────────────────────────
 
   const adminPassword = await bcrypt.hash('admin123', 10);
-  const adminUser = await prisma.user.upsert({
-    where: { phone: '+919999999999' },
-    update: {
-      password: adminPassword,
-    },
-    create: {
-      phone: '+919999999999',
-      name: 'FixHub Admin',
-      email: 'admin@fixhub.in',
-      password: adminPassword,
-      role: Role.ADMIN,
-      isActive: true,
-    },
-  });
+  let adminUser = await prisma.user.findFirst({ where: { phone: '+919999999999' } });
+  if (adminUser) {
+    adminUser = await prisma.user.update({
+      where: { id: adminUser.id },
+      data: { password: adminPassword },
+    });
+  } else {
+    adminUser = await prisma.user.create({
+      data: {
+        phone: '+919999999999',
+        name: 'FixHub Admin',
+        email: 'admin@fixhub.in',
+        password: adminPassword,
+        role: Role.ADMIN,
+        isActive: true,
+      },
+    });
+  }
   console.log(`  ✅ Admin user: ${adminUser.phone} (${adminUser.id})`);
 
   // ── Layer 2: Service Areas (Kolathur Pilot) ───────────────
@@ -260,17 +264,18 @@ async function main() {
     console.log(`  ✅ ${subServices.length} electrical sub-services seeded`);
 
     // ── Layer 4: Technician for testing ───────────────────────
-    const technicianUser = await prisma.user.upsert({
-      where: { phone: '+918888888888' },
-      update: {},
-      create: {
-        phone: '+918888888888',
-        name: 'Test Technician',
-        email: 'technician@fixhub.in',
-        role: Role.TECHNICIAN,
-        isActive: true,
-      },
-    });
+    let technicianUser = await prisma.user.findFirst({ where: { phone: '+918888888888' } });
+    if (!technicianUser) {
+      technicianUser = await prisma.user.create({
+        data: {
+          phone: '+918888888888',
+          name: 'Test Technician',
+          email: 'technician@fixhub.in',
+          role: Role.TECHNICIAN,
+          isActive: true,
+        },
+      });
+    }
 
     const technician = await prisma.technician.upsert({
       where: { userId: technicianUser.id },
@@ -283,7 +288,7 @@ async function main() {
     });
 
     const kolathurArea = await prisma.serviceArea.findUnique({
-      where: { pincode: '600099' }
+      where: { pincode: '600099' },
     });
 
     if (kolathurArea) {
@@ -292,18 +297,18 @@ async function main() {
           technicianId_serviceAreaId: {
             technicianId: technician.id,
             serviceAreaId: kolathurArea.id,
-          }
+          },
         },
         update: {},
         create: {
           technicianId: technician.id,
           serviceAreaId: kolathurArea.id,
-        }
+        },
       });
     }
 
     const dbSubServices = await prisma.subService.findMany({
-      where: { categoryId: electrical.id }
+      where: { categoryId: electrical.id },
     });
 
     for (const sub of dbSubServices) {
@@ -312,16 +317,18 @@ async function main() {
           technicianId_subServiceId: {
             technicianId: technician.id,
             subServiceId: sub.id,
-          }
+          },
         },
         update: {},
         create: {
           technicianId: technician.id,
           subServiceId: sub.id,
-        }
+        },
       });
     }
-    console.log(`  ✅ Test technician seeded (mapped to Kolathur & ${dbSubServices.length} sub-services)`);
+    console.log(
+      `  ✅ Test technician seeded (mapped to Kolathur & ${dbSubServices.length} sub-services)`,
+    );
   }
 
   console.log('\n🎉 Database seed completed successfully!');
