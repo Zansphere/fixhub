@@ -1,17 +1,19 @@
 'use client';
 
-import * as React from 'react';
-import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { toast } from 'sonner';
 import { useMutation } from '@tanstack/react-query';
+import { AxiosError } from 'axios';
+import { Zap } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import * as React from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
+import { z } from 'zod';
+
+import { Button, Input } from '@/components/ui';
 import { apiClient } from '@/lib/api/client';
 import { endpoints } from '@/lib/api/endpoints';
 import { setAdminSessionMarker } from '@/lib/auth/session';
-import { Button, Input } from '@/components/ui';
-import { Zap } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email('Enter a valid email address'),
@@ -33,13 +35,18 @@ export default function LoginPage() {
       const res = await apiClient.post(endpoints.auth.adminLogin, data);
       return res.data.data;
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       setAdminSessionMarker();
       toast.success('Logged in successfully');
       router.push('/');
     },
-    onError: (error: any) => {
-      toast.error(error?.response?.data?.message || 'Invalid credentials. Please try again.');
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error?.response?.data?.message ||
+          (error?.response
+            ? 'Invalid credentials. Please try again.'
+            : 'Unable to connect to backend server.'),
+      );
     },
   });
 
@@ -78,11 +85,7 @@ export default function LoginPage() {
               error={form.formState.errors.password?.message}
               {...form.register('password')}
             />
-            <Button
-              type="submit"
-              className="w-full"
-              loading={loginMutation.isPending}
-            >
+            <Button type="submit" className="w-full" loading={loginMutation.isPending}>
               Sign in
             </Button>
           </form>
