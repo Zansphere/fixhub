@@ -35,11 +35,27 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // CORS
-  const corsOrigins = configService.get<string[]>('cors.origins', ['http://localhost:3001', 'https://fixhub-admin-neon.vercel.app']);
+  const corsOrigins = configService.get<string[]>('cors.origins', [
+    'http://localhost:3001',
+    'https://fixhub-admin-neon.vercel.app',
+  ]);
   app.enableCors({
-    origin: corsOrigins,
+    origin: (origin: string, callback: (err: Error | null, allow?: boolean) => void) => {
+      if (
+        !origin ||
+        corsOrigins.includes(origin) ||
+        origin.endsWith('.trycloudflare.com') ||
+        origin.endsWith('.ngrok-free.app') ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1') ||
+        origin.includes('192.168.')
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],
   });
 
